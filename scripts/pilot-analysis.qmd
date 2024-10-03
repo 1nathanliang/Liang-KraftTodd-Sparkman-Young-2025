@@ -1,0 +1,1440 @@
+---
+title: "Statistical Analyses for Reputational Incentives Can Motivate Authentic Prosocial Signaling (Pilot Data)"
+author: "Nathan Liang"
+date: "April 25, 2023"
+format: 
+  html:
+    code-fold: true
+    code-tools: true
+editor: "source"
+number_sections: true
+theme:
+  dark: "darkly"
+  light: "flatly"
+---
+
+# Import Packages and Datasets
+
+## Identify Dependencies
+
+```{r identify-dependencies, include=F, message=F, warning=F}
+dependencies <- unique(renv::dependencies()$Package)
+print(dependencies)
+```
+
+## Load Packages
+
+```{r load-packages, include=F, message=F, warning=F}
+if (!require(pacman)) install.packages('pacman'); require(pacman)
+
+pacman::p_load(
+  # Read/write data
+  vroom, here, renv, janitor,
+  
+  # Reformat data
+  dplyr, tidyr, tidyselect, stringr, forcats, knitr,
+  lubridate, magrittr, rmarkdown, purrr,
+  
+  # Analyze data
+  emmeans, effectsize, parameters, performance, rstatix, 
+  car, scales, lmtest, psych,
+  
+  # Visualize data
+  rlang, tune, sysfonts, ggplot2, ggrain, ggpp, ggtext, ggpattern, papaja)
+```
+
+## Read in Data
+
+```{r read-raw-data, message=F, warning=F}
+# Import raw data for pilot study
+df_complete <- vroom::vroom(
+  here::here("pilot/data/clean/pilot-data-clean-complete.csv"), 
+  show_col_types = F, delim = ",") |> 
+  dplyr::mutate(public_private = forcats::fct_relevel(public_private, c("public", "private")))
+```
+
+## Set Plotting Theme
+
+```{r plotting-defaults, message=F, warning=F}
+theme_nl <- function() {
+  list(
+    ggplot2::theme_bw() +
+      ggplot2::theme(
+        axis.ticks           = element_line(size = 0.25),
+        axis.ticks.length    = unit(.05, units = "cm"),
+        text                 = element_text(family = "Arial"),
+        axis.title.x         = ggtext::element_markdown(size = 6, 
+                                                        margin = margin(t = 5)),
+        axis.text.x          = element_text(size = 5),
+        axis.title.y         = ggtext::element_markdown(size = 6, angle = 90),
+        axis.text.y          = element_text(size = 5),
+        panel.grid.major     = element_line(size = 0.1, color = "darkgray"),
+        panel.grid.minor     = element_line(size = 0.1, color = "darkgray"),
+        panel.border         = element_blank(),  # Remove all borders
+        axis.line.x          = element_line(color = "black", linewidth = 0.25),  # bottom border
+        axis.line.y          = element_line(color = "black", linewidth = 0.25),  # left border
+        strip.background     = element_rect(colour = "#D9D9D9"),
+        strip.text           = element_text(size = 5, face = "bold"),
+        legend.title         = ggtext::element_markdown(size = 6),
+        legend.text          = element_text(size = 5),
+        legend.key.size      = unit(.75, "line"),
+        legend.justification = "center",
+        legend.position      = "bottom",
+        legend.box           = "horizontal"))
+}
+```
+
+# Ensure Data Types are Correct
+
+```{r demographics, message=F, warning=F}
+# str(df)
+df_complete <- df_complete |> 
+  # Response ID
+  dplyr::mutate(
+    dplyr::across(c(
+      batch, believe_real,
+      unique_group_id, group_id, partner_choice, public_private), 
+      as.factor)) |> 
+  
+  dplyr::mutate(
+    
+    # Race/Ethnicity
+    ethnicity_simplified = factor(
+      dplyr::case_match(
+        ethnicity_simplified,
+        "Mixed" ~ "Multiracial",
+        .default = ethnicity_simplified)),
+    
+    # Sex
+    sex = forcats::fct_relevel(factor(sex), "Male", "Female"),
+    
+    # Income
+    income = forcats::fct_relevel(
+      dplyr::case_match(
+        income,
+        "< $10,000"            ~ "<$10,000",
+        "$10,000 to $19,999"   ~ "$10,000–$19,999",
+        "$20,000 to $29,999"   ~ "$20,000–$29,999",
+        "$30,000 to $39,999"   ~ "$30,000–$39,999",
+        "$40,000 to $49,999"   ~ "$40,000–$49,999",
+        "$50,000 to $74,999"   ~ "$50,000–$74,999",
+        "$75,000 to $99,999"   ~ "$75,000–$99,999",
+        "$100,000 to $149,999" ~ "$100,000–$149,999",
+        .default = income),
+      "<$10,000", 
+      "$10,000–$19,999", 
+      "$20,000–$29,999", 
+      "$30,000–$39,999", 
+      "$40,000–$49,999", 
+      "$50,000–$74,999", 
+      "$75,000–$99,999",
+      "$100,000–$149,999", 
+      ">$150,000"),
+    
+    # Education
+    education = forcats::fct_relevel(
+      dplyr::case_match(
+        education,
+        "Less than a high school diploma" ~ "< High school",
+        "High school degree or equivalent (e.g. GED)" ~ "High school",
+        "Associate Degree (e.g. AA, AS)"  ~ "Associate",
+        "Some college, no degree" ~ "Some college, no degree",
+        "Bachelor's Degree (e.g. BA, BS)" ~ "Bachelor's",
+        paste(
+          "Postgraduate Degree (e.g. Master's Degree,", 
+          "Professional Degree, Doctorate Degree)"
+        ) ~ "Postgraduate"
+      ),
+      "< High school",
+      "High school",
+      "Associate",
+      "Some college, no degree",
+      "Bachelor's",
+      "Postgraduate"),
+    
+    # Employment Status
+    employment_status = forcats::fct_relevel(
+      dplyr::case_match(
+        employment_status,
+        paste(
+          "Not in paid work (e.g. homemaker',",
+          "'retired or disabled)") ~ "Other",
+        "Unemployed (and job seeking)" ~ "Unemployed and not applying",
+        .default = employment_status), 
+      "Unemployed but applying", 
+      "Part-Time", 
+      "Full-Time", 
+      "Other"),
+    
+    # Political Affiliation
+    political_overall = forcats::fct_relevel(
+      dplyr::case_match(
+        political_overall,
+        "Something else:" ~ "Other",
+        .default = political_overall), 
+      "Republican", "Democrat", "Independent", "Other"),
+    believe_real = dplyr::if_else(believe_real == "Yes", 1, 0))
+```
+
+------------------------------------------------------------------------
+# Descriptives
+
+## Demographics
+
+::: {.panel-tabset .nav-pills}
+### Race/Ethnicity and Gender
+
+```{r demographics-race-ethnicity-gender, message=F, warning=F, echo=F}
+# ---------------------- #
+# DESCRIPTIVE STATISTICS #
+# ---------------------- #
+# Race/Ethnicity
+df_complete |> 
+  dplyr::select(ethnicity_simplified) |>
+  dplyr::summarize(
+    percent_total = dplyr::n() / nrow(df_complete) * 100, 
+    .by = ethnicity_simplified) |> 
+  # dplyr::ungroup() |>
+  dplyr::arrange(ethnicity_simplified, desc(percent_total)) |> 
+  knitr::kable(
+    col.names = c("Race/Ethnicity", "Percent"),
+    digits = c(0, 2))
+
+# Sex
+df_complete |> 
+  dplyr::select(sex) |>
+  dplyr::summarize(
+    percent_total = dplyr::n() / nrow(df_complete) * 100, 
+    .by = sex) |> 
+  dplyr::arrange(sex, desc(percent_total)) |> 
+  knitr::kable(
+    col.names = c("Sex", "Percent"),
+    digits = c(0, 2))
+
+# Age
+df_complete |> 
+  dplyr::select(age) |> 
+  rstatix::get_summary_stats() |> 
+  knitr::kable(
+    col.names = c(
+      "Variable", "n", "Min", "Max", "Median", "Q1", "Q3", "IQR", 
+      "MAD", "Mean", "SD", "SE", "95% CI"),
+    digits = c(0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2))
+
+# -------- #
+# DATA VIS #
+# -------- #
+# Race/Ethnicity and Sex
+df_complete |> 
+  dplyr::select(ethnicity_simplified, sex) |> 
+  tidyr::drop_na() |>
+  ggplot2::ggplot(
+    ggplot2::aes(
+      x    = ethnicity_simplified, 
+      fill = sex)) + 
+  ggplot2::geom_bar(position = position_dodge()) +
+  ggplot2::labs(
+    title = "Race/Ethnicity by Sex Distribution",
+    x     = "Race/Ethnicity",
+    y     = "Count",
+    fill  = "Sex") +
+  ggplot2::scale_fill_manual(values = c("#00A9FF", "#ED68ED", "#8494FF")) +
+  theme_nl()
+
+# Age
+df_complete |> 
+  dplyr::select(age) |> 
+  ggplot2::ggplot(ggplot2::aes(x = age)) + 
+  ggplot2::geom_bar() +
+  ggplot2::labs(
+    title = "Age Distribution",
+    x     = "Age",
+    y     = "Count") + 
+  theme_nl()
+
+# Income
+df_complete |> 
+  dplyr::select(income) |> 
+  tidyr::drop_na() |>
+  ggplot2::ggplot(ggplot2::aes(x = income)) + 
+  ggplot2::geom_bar() +
+  ggplot2::labs(
+    title = "Income Distribution",
+    x     = "Income",
+    y     = "Count") + 
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45)) +
+  theme_nl()
+
+# Education
+df_complete |> 
+  dplyr::select(education) |> 
+  tidyr::drop_na() |>
+  ggplot2::ggplot(
+    ggplot2::aes(x = education)) + 
+  ggplot2::geom_bar() +
+  ggplot2::labs(
+    title = "Education Distribution",
+    x     = "Education",
+    y     = "Count") + 
+  theme_nl() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45))
+
+# Employment Status
+df_complete |> 
+  dplyr::select(employment_status) |> 
+  tidyr::drop_na() |>
+  ggplot2::ggplot(ggplot2::aes(x = employment_status)) + 
+  ggplot2::geom_bar() +
+  ggplot2::labs(
+    title = "Employment Status Distribution",
+    x     = "Employment Status",
+    y     = "Count") + 
+  theme_nl() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45))
+
+# Political Affiliation
+df_complete |> 
+  dplyr::select(political_overall) |> 
+  tidyr::drop_na() |>
+  ggplot2::ggplot(
+    ggplot2::aes(
+      x    = political_overall,
+      fill = political_overall)) + 
+  ggplot2::geom_bar() +
+  ggplot2::labs(
+    title = "Political Affiliation Distribution",
+    x     = "Political Affiliation",
+    y     = "Count") + 
+  ggplot2::guides(fill = "none") +
+  ggplot2::scale_fill_manual(values = c("#F8766D", "#35A2FF", "#8494FF", "#39B600"))
+  theme_nl()
+```
+:::
+
+------------------------------------------------------------------------
+
+# Supplementary Information
+
+## Preregistered Analyses
+
+### Preregistered H1 (H1 in Main Paper)
+
+Independent-Samples T-Test
+
+```{r hypothesis-1-prereg-t-test, message=F, warning=F}
+# --------- #
+# PREP DATA #
+# --------- #
+df_pre1 <- df_complete |> 
+  dplyr::select(
+    participant_role, public_private, partner_choice, dg_a_gen_transfer) |> 
+  dplyr::filter(stringr::str_starts(participant_role, "A")) |> 
+  tidyr::drop_na(dg_a_gen_transfer) |> 
+  dplyr::mutate(public_private = forcats::fct_relevel(public_private, "public"))
+
+# -------------------------- #
+# INDEPENDENT-SAMPLES T-TEST #
+# -------------------------- #
+ttest_pre1 <- t.test(
+  formula     = dg_a_gen_transfer ~ public_private, 
+  data        = df_pre1, 
+  alternative = "greater")
+parameters::model_parameters(ttest_pre1)
+effectsize::effectsize(ttest_pre1)
+
+# ------------ #
+# LINEAR MODEL #
+# ------------ #
+lm_pre1 <- lm(
+  formula   = dg_a_gen_transfer ~ public_private, 
+  data      = df_pre1, 
+  contrasts = list(public_private = "contr.sum"))
+
+# ------------------------ #
+# ESTIMATED MARGINAL MEANS #
+# ------------------------ #
+# table(df_preh1$public_private)
+# Observability: Public - Private
+parameters::model_parameters(
+  emmeans::emmeans(lm_pre1, specs = ~public_private))
+```
+
+### Preregistered H2 (H4 in Main Paper)
+
+Linear Regression
+
+Comparing initial trustor generosity in the TG by observability controlling for
+generosity in the DG.
+
+```{r hypothesis-4-prereg-lm, message=F, warning=F}
+# --------- #
+# PREP DATA #
+# --------- #
+df_pre2 <- df_complete |>
+  dplyr::filter(!stringr::str_starts(participant_role, "B")) |>
+  dplyr::select(
+    unique_group_id, participant_role, 
+    public_private, partner_choice,
+    dg_a_chosen_transfer_ratio, tg_c_transfer_ratio) |> 
+  dplyr::group_by(unique_group_id) |> 
+  dplyr::mutate(
+    dg_a_chosen_transfer_ratio = dplyr::if_else(
+      is.na(dg_a_chosen_transfer_ratio), 
+      dplyr::first(na.omit(dg_a_chosen_transfer_ratio)), 
+      dg_a_chosen_transfer_ratio),
+    tg_c_transfer_ratio = dplyr::if_else(
+      is.na(tg_c_transfer_ratio), 
+      dplyr::first(na.omit(tg_c_transfer_ratio)), 
+      tg_c_transfer_ratio)) |> 
+  dplyr::ungroup() |>
+  dplyr::distinct(unique_group_id, .keep_all = T) |> 
+  dplyr::arrange(unique_group_id, participant_role)
+
+# ------------ #
+# LINEAR MODEL #
+# ------------ #
+lm_pre2 <- lm(
+  formula   = tg_c_transfer_ratio ~ public_private + dg_a_chosen_transfer_ratio, 
+  data      = df_pre2, 
+  contrasts = list(public_private = "contr.sum"))
+
+# -------------- #
+# TYPE III ANOVA #
+# -------------- #
+anova_lm_pre2 <- car::Anova(lm_pre2, type = 3)
+parameters::model_parameters(lm_pre2)
+effectsize::effectsize(lm_pre2)
+
+# ------------ #
+# LINEAR MODEL #
+# ------------ #
+# As an additional test, do not control for DG generosity
+lm_pre2 <- lm(
+  formula   = tg_c_transfer_ratio ~ public_private, 
+  data      = df_pre2, 
+  contrasts = list(public_private = "contr.sum"))
+
+# ------------------------ #
+# ESTIMATED MARGINAL MEANS #
+# ------------------------ #
+# table(df_pre4$public_private)
+lm_pre2_obs_emm <- emmeans::emmeans(lm_pre2, specs = ~public_private)
+parameters::model_parameters(lm_pre2_obs_emm)
+
+# -------------------- #
+# PAIRWISE COMPARISONS #
+# -------------------- #
+# Observability: Public - Private
+parameters::model_parameters(
+  emmeans::contrast(
+    object = lm_pre2_obs_emm, 
+    method = "pairwise", 
+    infer  = T, 
+    adj    = "none"))
+```
+
+### Preregistered H3 (Not in Main Text)
+
+Linear Regression
+
+```{r hypothesis-3-prereg-lm, message=F, warning=F}
+# --------- #
+# PREP DATA #
+# --------- #
+df_pre3 <- df_complete |>
+  dplyr::filter((participant_role == "C") & (partner_choice == "yes")) |> 
+  dplyr::select(
+    participant_role, tg_partner_choice, dg_a1_transfer_ratio, dg_a2_transfer_ratio, tg_partner_choice) |> 
+  dplyr::mutate(
+    dg_transfer_ratio_diff = dg_a1_transfer_ratio - dg_a2_transfer_ratio)
+
+# ------------ #
+# LINEAR MODEL #
+# ------------ #
+lm_pre3 <- lm(
+  formula    = dg_transfer_ratio_diff ~ tg_partner_choice, 
+  data       = df_pre3, 
+  contrasts  = list(tg_partner_choice = "contr.sum"))
+
+# ------------------------ #
+# ESTIMATED MARGINAL MEANS #
+# ------------------------ #
+# table(df_pre3$tg_partner_choice)
+lm_pre3_tg_pc_emm <- emmeans::emmeans(lm_pre3, specs = ~tg_partner_choice)
+parameters::model_parameters(lm_pre3_tg_pc_emm)
+
+# -------------------- #
+# PAIRWISE COMPARISONS #
+# -------------------- #
+# Partner Choice: A1 - A2
+parameters::model_parameters(
+  emmeans::contrast(
+    object = lm_pre3_tg_pc_emm, 
+    method = "pairwise", 
+    infer  = T, 
+    adj    = "none"))
+
+# ------------------------------- #
+# EFFECT SIZE FOR MEAN COMPARISON #
+# ------------------------------- #
+# Partner Choice: A1 - A2 (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = lm_pre3_tg_pc_emm, 
+    sigma  = sigma(lm_pre3), 
+    edf    = df.residual(lm_pre3)))
+```
+
+### Preregistered H4 (H3 in Main Paper)
+
+Linear Regression
+
+@h3-prereg-lm
+@h3-morality-lm
+
+### Preregistered H5 (H2 in Main Paper)
+
+Linear Regression
+
+The transfer difference is more negative (A2 gave more than A1) when A2 is 
+picked -- in other words, A2 is picked when they give more than A1.
+
+```{r hypothesis-5-prereg-lm, message=F, warning=F}
+# --------- #
+# PREP DATA #
+# --------- #
+df_pre5 <- df_complete |> 
+  dplyr::filter(!stringr::str_starts(participant_role, "B")) |>
+  dplyr::select(
+    unique_group_id, participant_role, public_private, partner_choice,
+    dg_a_chosen_transfer_ratio, tg_a_return_ratio) |> 
+  dplyr::group_by(unique_group_id) |> 
+  dplyr::mutate(
+    dg_a_chosen_transfer_ratio = dplyr::if_else(
+      is.na(dg_a_chosen_transfer_ratio), 
+      dplyr::first(na.omit(dg_a_chosen_transfer_ratio)), 
+      dg_a_chosen_transfer_ratio),
+    tg_a_return_ratio = dplyr::if_else(
+      is.na(tg_a_return_ratio),
+      dplyr::first(na.omit(tg_a_return_ratio)), 
+      tg_a_return_ratio)) |> 
+  dplyr::ungroup() |>
+  dplyr::arrange(unique_group_id, participant_role) |> 
+  dplyr::distinct(unique_group_id, .keep_all = T)
+
+# ------------ #
+# LINEAR MODEL #
+# ------------ #
+lm_pre5 <- lm(
+  formula = tg_a_return_ratio ~ dg_a_chosen_transfer_ratio, 
+  data    = df_pre5)
+
+parameters::model_parameters(lm_pre5)
+```
+
+--------------------------------------------------------------------------------
+
+# Main Text Analyses
+
+## H1: "Expressed as Signal"
+
+### Modeling Game Behavior
+
+```{r hypothesis-1-behavioral-lm, message=F, warning=F}
+# --------- #
+# PREP DATA #
+# --------- #
+df_h1 <- df_complete |> 
+  dplyr::select(
+    participant_role, public_private, partner_choice, dg_a_gen_transfer_ratio) |> 
+  dplyr::filter(stringr::str_starts(participant_role, "A")) |> 
+  tidyr::drop_na(dg_a_gen_transfer_ratio) |> 
+  dplyr::mutate(
+    partner_choice = forcats::fct_relevel(
+      dplyr::case_when(
+        partner_choice == "yes" ~ "Yes",
+        partner_choice == "no"  ~ "No"),
+      c("No", "Yes")),
+    public_private = forcats::fct_relevel(
+      dplyr::case_when(
+        public_private == "public"  ~ "Public",
+        public_private == "private" ~ "Private"),
+      c("Private", "Public")))
+```
+
+#### Linear Model
+
+```{r hypothesis-1-lm, message=F, warning=F}
+# ------------ #
+# LINEAR MODEL #
+# ------------ #
+lm_h1 <- lm(
+  formula   = dg_a_gen_transfer_ratio ~ public_private + partner_choice, 
+  data      = df_h1,
+  contrasts = list(
+    public_private = "contr.sum", 
+    partner_choice = "contr.sum"))
+
+# -------------- #
+# TYPE III ANOVA #
+# -------------- #
+anova_lm_h1 <- car::Anova(lm_h1, type = 3)
+parameters::model_parameters(anova_lm_h1)
+effectsize::effectsize(anova_lm_h1)
+
+# ------------------------ #
+# ESTIMATED MARGINAL MEANS #
+# ------------------------ #
+# table(df_h1$public_private)
+lm_h1_obs_emm <- emmeans::emmeans(lm_h1, specs = ~public_private)
+parameters::model_parameters(lm_h1_obs_emm)
+
+# table(df_h1$partner_choice)
+lm_h1_pc_emm  <- emmeans::emmeans(lm_h1, specs = ~partner_choice)
+parameters::model_parameters(lm_h1_pc_emm)
+
+# -------------------- #
+# PAIRWISE COMPARISONS #
+# -------------------- #
+# Observability: Public - Private
+parameters::model_parameters(
+  emmeans::contrast(
+    object = lm_h1_obs_emm, 
+    method = "pairwise",
+    infer  = T, 
+    adjust = "none"))
+
+# Partner Choice: Yes - No
+parameters::model_parameters(
+  emmeans::contrast(
+    object = lm_h1_pc_emm, 
+    method = "pairwise", 
+    infer  = T, 
+    adjust = "none"))
+
+# --------------------------------- #
+# EFFECT SIZES FOR MEAN COMPARISONS #
+# --------------------------------- #
+# Observability: Public - Private (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = lm_h1_obs_emm, 
+    sigma  = sigma(lm_h1), 
+    edf    = df.residual(lm_h1)))
+
+# Partner Choice: Yes - No (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = lm_h1_pc_emm, 
+    sigma  = sigma(lm_h1), 
+    edf    = df.residual(lm_h1)))
+```
+
+------------------------------------------------------------------------
+
+## H2: Actually a Signal
+
+### Modeling Game Behavior
+
+```{r hypothesis-2-prep-data, message=F, warning=F}
+# --------- #
+# PREP DATA #
+# --------- #
+df_h2 <- df_pre5
+```
+
+#### Linear Model
+
+```{r hypothesis-2-lm, message=F, warning=F}
+# ------------ #
+# LINEAR MODEL #
+# ------------ #
+lm_h2 <- lm(
+  formula   = tg_a_return_ratio ~ public_private + partner_choice + dg_a_chosen_transfer_ratio, 
+  data      = df_h2,
+  contrasts = list(
+    public_private = "contr.sum",
+    partner_choice = "contr.sum"))
+
+# -------------- #
+# TYPE III ANOVA #
+# -------------- #
+anova_lm_h2 <- car::Anova(lm_h2, type = 3)
+parameters::model_parameters(anova_lm_h2)
+effectsize::effectsize(anova_lm_h2)
+
+# ---------------------- #
+# AVERAGE MARGINAL TREND #
+# ---------------------- #
+parameters::model_parameters(
+  emmeans::emtrends(lm_h2, ~1, var = "dg_a_chosen_transfer_ratio", infer = T))
+
+# ------------------------ #
+# ESTIMATED MARGINAL MEANS #
+# ------------------------ #
+# table(df_h2$public_private)
+# Observability: Public - Private
+lm_h2_obs_emm <- emmeans::emmeans(lm_h2, specs = ~public_private)
+parameters::model_parameters(lm_h2_obs_emm)
+
+# table(df_h2$partner_choice)
+# Partner Choice: Yes - No
+lm_h2_pc_emm  <- emmeans::emmeans(lm_h2, specs = ~partner_choice)
+parameters::model_parameters(lm_h2_pc_emm)
+
+# -------------------- #
+# PAIRWISE COMPARISONS #
+# -------------------- #
+# Observability: Public - Private
+parameters::model_parameters(
+  emmeans::contrast(
+    object = lm_h2_obs_emm, 
+    method = "pairwise", 
+    infer  = T, 
+    adjust = "none"))
+
+# Partner Choice: Yes - No
+parameters::model_parameters(
+  emmeans::contrast(
+    object = lm_h2_pc_emm,  
+    method = "pairwise", 
+    infer  = T, 
+    adjust = "none"))
+
+# --------------------------------- #
+# EFFECT SIZES FOR MEAN COMPARISONS #
+# --------------------------------- #
+# Observability: Public - Private (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = lm_h2_obs_emm, 
+    sigma  = sigma(lm_h2), 
+    edf    = df.residual(lm_h2)))
+
+# Partner Choice: Yes - No (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = lm_h2_pc_emm, 
+    sigma  = sigma(lm_h2), 
+    edf    = df.residual(lm_h2)))
+```
+
+#### Curvilinear Model
+
+```{r hypothesis-2-qm, message=F, warning=F}
+# --------------- #
+# QUADRATIC MODEL #
+# --------------- #
+qm_h2 <- lm(
+  formula   = tg_a_return_ratio ~ public_private + partner_choice + dg_a_chosen_transfer_ratio + I(dg_a_chosen_transfer_ratio^2), 
+  data      = tidyr::drop_na(df_h2, dg_a_chosen_transfer_ratio),
+  contrasts = list(
+    public_private = "contr.sum", 
+    partner_choice = "contr.sum"))
+
+# ---------------------- #
+# AVERAGE MARGINAL TREND #
+# ---------------------- #
+parameters::model_parameters(
+  emmeans::emtrends(
+    qm_h2, ~1, var = "dg_a_chosen_transfer_ratio", infer = T, max.degree = 2))
+
+# -------------- #
+# TYPE III ANOVA #
+# -------------- #
+anova_qm_h2 <- car::Anova(qm_h2, type = 3)
+parameters::model_parameters(anova_qm_h2)
+effectsize::effectsize(anova_qm_h2)
+
+# ------------------------ #
+# ESTIMATED MARGINAL MEANS #
+# ------------------------ #
+# table(df_h2$public_private)
+# Observability: Public - Private
+qm_h2_obs_emm <- emmeans::emmeans(qm_h2, specs = ~public_private)
+parameters::model_parameters(qm_h2_obs_emm)
+
+# table(df_h2$partner_choice)
+# Partner Choice: Yes - No
+qm_h2_pc_emm  <- emmeans::emmeans(qm_h2, specs = ~partner_choice)
+parameters::model_parameters(qm_h2_pc_emm)
+
+# -------------------- #
+# PAIRWISE COMPARISONS #
+# -------------------- #
+# Observability: Public - Private
+parameters::model_parameters(
+  emmeans::contrast(
+    object = qm_h2_obs_emm, 
+    method = "pairwise", 
+    infer  = T, 
+    adjust = "none"))
+
+# Partner Choice: Yes - No
+parameters::model_parameters(
+  emmeans::contrast(
+    object = qm_h2_pc_emm,  
+    method = "pairwise", 
+    infer  = T, 
+    adjust = "none"))
+
+# --------------------------------- #
+# EFFECT SIZES FOR MEAN COMPARISONS #
+# --------------------------------- #
+# Observability: Public - Private (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = qm_h2_obs_emm, 
+    sigma  = sigma(qm_h2), 
+    edf    = df.residual(qm_h2)))
+
+# Partner Choice: Yes - No (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = qm_h2_pc_emm, 
+    sigma  = sigma(qm_h2), 
+    edf    = df.residual(qm_h2)))
+```
+
+------------------------------------------------------------------------
+
+## H3: Perceived as Signal
+
+### Modeling Game Behavior
+
+```{r hypothesis-3-lm, message=F, warning=F}
+# --------- #
+# PREP DATA #
+# --------- #
+df_h3a <- df_complete |>
+  dplyr::filter(!stringr::str_starts(participant_role, "B")) |>
+  dplyr::select(
+    unique_group_id, participant_role, public_private, partner_choice,
+    dg_a_chosen_transfer_ratio, tg_c_transfer_ratio) |> 
+  dplyr::group_by(unique_group_id) |> 
+  dplyr::mutate(
+    dg_a_chosen_transfer_ratio = dplyr::if_else(
+      is.na(dg_a_chosen_transfer_ratio), 
+      dplyr::first(na.omit(dg_a_chosen_transfer_ratio)), 
+      dg_a_chosen_transfer_ratio),
+    tg_c_transfer_ratio = dplyr::if_else(
+      is.na(tg_c_transfer_ratio),
+      dplyr::first(na.omit(tg_c_transfer_ratio)), 
+      tg_c_transfer_ratio)) |> 
+  dplyr::ungroup() |>
+  dplyr::arrange(unique_group_id, participant_role) |> 
+  dplyr::distinct(unique_group_id, .keep_all = T)
+```
+
+#### Linear Model
+
+```{r hypothesis-3-behavioral-lm, message=F, warning=F}
+# ------------ #
+# LINEAR MODEL #
+# ------------ #
+lm_h3a <- lm(
+  formula = tg_c_transfer_ratio ~ dg_a_chosen_transfer_ratio, 
+  data    = df_h3a)
+
+# Unstandardized Regression Coefficient
+parameters::model_parameters(lm_h3a)
+
+# Standardized Regression Coefficient
+effectsize::effectsize(lm_h3a)
+```
+
+#### Curvilinear Model
+
+```{r hypothesis-3-behavioral-qm, message=F, warning=F}
+# --------------- #
+# QUADRATIC MODEL #
+# --------------- #
+qm_h3a <- lm(
+  formula = tg_c_transfer_ratio ~ dg_a_chosen_transfer_ratio + I(dg_a_chosen_transfer_ratio^2), 
+  data    = df_h3a)
+
+# ----------------------- #
+# AVERAGE MARGINAL TREND # 
+# ----------------------- #
+parameters::model_parameters(
+  emmeans::emtrends(qm_h3a, ~1, var = "dg_a_chosen_transfer_ratio", max.degree = 2))
+
+# -------------------------------------- #
+# UNSTANDARDIZED REGRESSION COEFFICIENTS #
+# -------------------------------------- #
+parameters::model_parameters(qm_h3a)
+
+# ------------------------------------ #
+# STANDARDIZED REGRESSION COEFFICIENTS #
+# ------------------------------------ #
+effectsize::effectsize(qm_h3a)
+```
+
+### Modeling Morality Ratings
+
+```{r hypothesis-3b-prep-data, message=F, warning=F}
+# --------- #
+# PREP DATA #
+# --------- #
+df_h3b <- df_complete |> 
+  ## Select relevant columns
+  dplyr::select(
+    participant_id, unique_group_id, participant_role, 
+    public_private, partner_choice,
+    
+    ### DG A/A1/A2 transfers and morality ratings
+    dg_a_transfer_ratio, dg_a1_transfer_ratio, dg_a2_transfer_ratio, 
+    dg_a_moral, dg_a1_moral, dg_a2_moral) |> 
+  
+  ## Pivot morality ratings 
+  ### dg_a_moral | dg_a1_moral | ... | swing into one column
+  tidyr::pivot_longer(
+    !c(participant_id, unique_group_id, participant_role, 
+       public_private, partner_choice,
+       dg_a_transfer_ratio, dg_a1_transfer_ratio, dg_a2_transfer_ratio), 
+    names_to = "morality_target", values_to = "morality_rating") |> 
+  tidyr::drop_na(morality_rating) |> 
+  
+  ## Pivot transfer allocation ratios
+  ### dg_a_transfer_ratio | dg_a1_transfer_ratio | ... | swing into one column
+  tidyr::pivot_longer(
+    !c(participant_id, unique_group_id, participant_role, 
+       public_private, partner_choice, morality_target, morality_rating), 
+    names_to = "transfer_allocator", values_to = "transfer_ratio") |> 
+  tidyr::drop_na(transfer_ratio) |>
+  
+  ## Only keep morality ratings / transfers corresponding to same target / game stage
+  dplyr::filter(
+    (stringr::str_starts(morality_target, "dg_a_") & 
+       stringr::str_starts(transfer_allocator, "dg_a_")) |
+      (stringr::str_starts(morality_target, "dg_a1_") & 
+         stringr::str_starts(transfer_allocator, "dg_a1_")) |
+      (stringr::str_starts(morality_target, "dg_a2_") & 
+         stringr::str_starts(transfer_allocator, "dg_a2_"))) |>
+  
+  ## Remove "_moral" suffix from each morality rating target, make rest uppercase
+  dplyr::mutate(
+    morality_target = stringr::str_sub(stringr::str_to_upper(
+      stringr::str_remove(morality_target, "moral")), end = -2)) |> 
+  
+  ## Distinguish game (DG vs. TG)---even though it's just DG
+  tidyr::separate_wider_delim(
+    morality_target, delim = "_", 
+    names = c("morality_target_game", "morality_target")) |> 
+  dplyr::mutate(
+    transfer_allocator = stringr::str_remove(transfer_allocator, "_ratio")) |> 
+  dplyr::select(-morality_target_game) |> 
+  
+  ## Code self-other
+  dplyr::mutate(
+    self_other = dplyr::if_else(participant_role == morality_target, "self", "other"),
+    .before = public_private)
+```
+
+#### Linear Model
+
+```{r hypothesis-3b-lm, message=F, warning=F}
+# ------------ #
+# LINEAR MODEL #
+# ------------ #
+lm_h3b <- lm(
+  formula   = morality_rating ~ participant_role + transfer_ratio, 
+  data      = dplyr::filter(df_h3b, self_other == "other"),
+  contrasts = list(participant_role = "contr.sum"))
+
+# -------------- #
+# TYPE III ANOVA #
+# -------------- #
+anova_lm_h3b <- car::Anova(lm_h3b, type = 3)
+parameters::model_parameters(anova_lm_h3b)
+effectsize::effectsize(anova_lm_h3b)
+
+# ------------------------ #
+# ESTIMATED MARGINAL MEANS #
+# ------------------------ #
+table(dplyr::filter(df_h3b, self_other == "other")$participant_role)
+lm_h3b_role_emm <- emmeans::emmeans(lm_h3b, specs = ~participant_role)
+parameters::model_parameters(lm_h3b_role_emm)
+
+# -------------------- #
+# PAIRWISE COMPARISONS #
+# -------------------- #
+# Participant Role: B - C
+parameters::model_parameters(
+  emmeans::contrast(
+    object = lm_h3b_role_emm, 
+    method = "pairwise", 
+    infer  = T, 
+    adjust = "none"))
+
+# ------------------------------- #
+# EFFECT SIZE FOR MEAN COMPARISON #
+# ------------------------------- #
+# Participant Role: B - C (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = lm_h3b_role_emm, 
+    sigma  = sigma(lm_h3b), 
+    edf    = df.residual(lm_h3b)))
+```
+
+#### Curvilinear Model
+
+```{r hypothesis-3b-qm, message=F, warning=F}
+# --------------- #
+# QUADRATIC MODEL #
+# --------------- #
+qm_h3b <- lm(
+  formula   = morality_rating ~ participant_role + transfer_ratio + I(transfer_ratio^2), 
+  data      = dplyr::filter(df_h3b, self_other == "other"),
+  contrasts = list(participant_role = "contr.sum"))
+
+# -------------- #
+# TYPE III ANOVA #
+# -------------- #
+anova_qm_h3b <- car::Anova(qm_h3b, type = 3)
+parameters::model_parameters(anova_qm_h3b)
+effectsize::effectsize(anova_qm_h3b)
+
+# ---------------------- #
+# AVERAGE MARGINAL TREND #
+# ---------------------- #
+parameters::model_parameters(
+  emmeans::emtrends(qm_h3b, ~1, var = "transfer_ratio", max.degree = 2))
+
+# ------------------------ #
+# ESTIMATED MARGINAL MEANS #
+# ------------------------ #
+# table(dplyr::filter(df_h3b, self_other == "other")$participant_role)
+qm_h3b_role_emm <- emmeans::emmeans(qm_h3b, specs = ~participant_role) 
+parameters::model_parameters(qm_h3b_role_emm)
+
+# -------------------- #
+# PAIRWISE COMPARISONS #
+# -------------------- #
+# Participant Role: B - C
+parameters::model_parameters(
+  emmeans::contrast(
+    object = qm_h3b_role_emm, 
+    method = "pairwise", 
+    infer  = T, 
+    adjust = "none"))
+
+# ------------------------------- #
+# EFFECT SIZE FOR MEAN COMPARISON #
+# ------------------------------- #
+# Participant Role: B - C (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = qm_h3b_role_emm, 
+    sigma  = sigma(qm_h3b), 
+    edf    = df.residual(qm_h3b)))
+```
+
+------------------------------------------------------------------------
+
+## H4: "Discounted as Signal"
+
+### Modeling Game Behavior
+
+```{r hypothesis-4a-prep-data, message=F, warning=F}
+# --------- #
+# PREP DATA #
+# --------- #
+df_h4a <- df_pre2
+```
+
+#### Linear Model
+
+```{r hypothesis-4a-lm, message=F, warning=F}
+# ------------ #
+# LINEAR MODEL #
+# ------------ #
+lm_h4a <- lm(
+  formula   = tg_c_transfer_ratio ~ public_private + partner_choice + dg_a_chosen_transfer_ratio,
+  data      = df_h4a,
+  contrasts = list(
+    public_private = "contr.sum", 
+    partner_choice = "contr.sum"))
+
+# -------------- #
+# TYPE III ANOVA #
+# -------------- #
+anova_lm_h4a <- car::Anova(lm_h4a, type = 3)
+parameters::model_parameters(anova_lm_h4a)
+effectsize::effectsize(anova_lm_h4a)
+
+# ------------------------ #
+# ESTIMATED MARGINAL MEANS #
+# ------------------------ #
+# table(df_h4a$public_private)
+lm_h4a_obs_emm <- emmeans::emmeans(lm_h4a, specs = ~public_private)
+parameters::model_parameters(lm_h4a_obs_emm)
+
+# table(df_h4a$partner_choice)
+lm_h4a_pc_emm  <- emmeans::emmeans(lm_h4a, specs = ~partner_choice)
+parameters::model_parameters(lm_h4a_pc_emm)
+
+# -------------------- #
+# PAIRWISE COMPARISONS #
+# -------------------- #
+# Observability: Public - Private
+parameters::model_parameters(
+  emmeans::contrast(
+    object = lm_h4a_obs_emm, 
+    method = "pairwise",
+    infer  = T, 
+    adjust = "none"))
+
+# Partner Choice: Yes - No
+parameters::model_parameters(
+  emmeans::contrast(
+    object = lm_h4a_pc_emm, 
+    method = "pairwise", 
+    infer  = T, 
+    adjust = "none"))
+
+# --------------------------------- #
+# EFFECT SIZES FOR MEAN COMPARISONS #
+# --------------------------------- #
+# Observability: Public - Private (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = lm_h4a_obs_emm, 
+    sigma  = sigma(lm_h4a), 
+    edf    = df.residual(lm_h4a)))
+
+# Partner Choice: Yes - No (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = lm_h4a_pc_emm, 
+    sigma  = sigma(lm_h4a), 
+    edf    = df.residual(lm_h4a)))
+```
+
+#### Curvilinear Model
+
+```{r hypothesis-4a-qm, message=F, warning=F}
+# --------------- #
+# QUADRATIC MODEL #
+# --------------- #
+qm_h4a <- lm(  # subsetting on "other"
+  formula   = tg_c_transfer_ratio ~ public_private + partner_choice + dg_a_chosen_transfer_ratio + I(dg_a_chosen_transfer_ratio^2), 
+  data      = df_h4a,
+  contrasts = list(
+    public_private = "contr.sum", 
+    partner_choice = "contr.sum"))  
+
+# ---------------------- #
+# AVERAGE MARGINAL TREND #
+# ---------------------- #
+parameters::model_parameters(
+  emmeans::emtrends(qm_h4a, ~1, var = "dg_a_chosen_transfer_ratio", max.degree = 2))
+
+# -------------- #
+# TYPE III ANOVA #
+# -------------- #
+anova_qm_h4a <- car::Anova(qm_h4a, type = 3)
+parameters::model_parameters(anova_qm_h4a)
+effectsize::effectsize(anova_qm_h4a)
+
+# ------------------------ #
+# ESTIMATED MARGINAL MEANS #
+# ------------------------ #
+# table(df_h4a$public_private)
+# Observability: Public - Private
+qm_h4a_obs_emm <- emmeans::emmeans(qm_h4a, specs = ~public_private) 
+parameters::model_parameters(qm_h4a_obs_emm)
+
+# Partner Choice: Yes - No
+qm_h4a_pc_emm  <- emmeans::emmeans(qm_h4a, specs = ~partner_choice)
+parameters::model_parameters(qm_h4a_pc_emm)
+
+# -------------------- #
+# PAIRWISE COMPARISONS #
+# -------------------- #
+# Observability: Public - Private
+parameters::model_parameters(
+  emmeans::contrast(
+    object = qm_h4a_obs_emm, 
+    method = "pairwise", 
+    infer  = T, 
+    adjust = "none"))
+
+# Partner Choice: Yes - No
+parameters::model_parameters(
+  emmeans::contrast(
+    object = qm_h4a_pc_emm, 
+    method = "pairwise", 
+    infer  = T, 
+    adjust = "none"))
+
+# --------------------------------- #
+# EFFECT SIZES FOR MEAN COMPARISONS #
+# --------------------------------- #
+# Observability: Public - Private (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = qm_h4a_obs_emm, 
+    sigma  = sigma(qm_h4a), 
+    edf    = df.residual(qm_h4a)))
+
+# Partner Choice: Yes - No (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = qm_h4a_pc_emm, 
+    sigma  = sigma(qm_h4a), 
+    edf    = df.residual(qm_h4a)))
+```
+
+### Modeling Morality Ratings
+
+```{r hypothesis-4b-prep-data, message=F, warning=F}
+# --------- #
+# PREP DATA #
+# --------- #
+df_h4b <- df_h3b
+```
+
+#### Linear Model
+
+```{r hypothesis-4b-lm, message=F, warning=F}
+# ------------ #
+# LINEAR MODEL #
+# ------------ #
+lm_h4b <- lm(  # subsetting on "other"
+  formula   = morality_rating ~ public_private * partner_choice + transfer_ratio, 
+  data      = dplyr::filter(df_h4b, self_other == "other"), 
+  contrasts = list(
+    partner_choice = "contr.sum", 
+    public_private = "contr.sum"))
+
+# -------------- #
+# TYPE III ANOVA #
+# -------------- #
+anova_h4b <- car::Anova(lm_h4b, type = 3)
+parameters::model_parameters(anova_h4b)
+effectsize::effectsize(anova_h4b)
+
+# ------------------------ #
+# ESTIMATED MARGINAL MEANS #
+# ------------------------ #
+# table(dplyr::filter(df_h4b, self_other == "other")$public_private)
+# Observability: Public - Private
+lm_h4b_obs_emm <- emmeans::emmeans(lm_h4b, specs = ~public_private) 
+parameters::model_parameters(lm_h4b_obs_emm)
+
+# table(dplyr::filter(df_h4b, self_other == "other")$partner_choice)
+# Partner Choice: No - Yes
+lm_h4b_pc_emm  <- emmeans::emmeans(lm_h4b, specs = ~partner_choice) 
+parameters::model_parameters(lm_h4b_pc_emm)
+
+# -------------------- #
+# PAIRWISE COMPARISONS #
+# -------------------- #
+# Observability: Public - Private
+parameters::model_parameters(
+  emmeans::contrast(
+    object = lm_h4b_obs_emm, 
+    method = "pairwise", 
+    infer  = T, 
+    adjust = "none"))
+
+# Partner Choice: No - Yes
+parameters::model_parameters(
+  emmeans::contrast(
+    object = lm_h4b_pc_emm, 
+    method = "pairwise",
+    infer  = T, 
+    adjust = "none"))
+
+# --------------------------------- #
+# EFFECT SIZES FOR MEAN COMPARISONS #
+# --------------------------------- #
+# Observability: Public - Private (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = lm_h4b_obs_emm, 
+    sigma  = sigma(lm_h4b), 
+    edf    = df.residual(lm_h4b)))
+
+# Partner Choice: No - Yes (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = lm_h4b_pc_emm, 
+    sigma  = sigma(lm_h4b), 
+    edf    = df.residual(lm_h4b)))
+```
+
+#### Curvilinear Model
+
+```{r hypothesis-4b-qm, message=F, warning=F}
+# --------------- #
+# QUADRATIC MODEL #
+# --------------- #
+qm_h4b <- lm(  # subsetting on "other"
+  formula   = morality_rating ~ public_private * partner_choice + transfer_ratio + I(transfer_ratio^2), 
+  data      = dplyr::filter(df_h4b, self_other == "other"),
+  contrasts = list(
+    partner_choice = "contr.sum", 
+    public_private = "contr.sum"))
+
+# -------------- #
+# TYPE III ANOVA #
+# -------------- #
+anova_qm_h4b <- car::Anova(qm_h4b, type = 3)
+parameters::model_parameters(anova_qm_h4b)
+effectsize::effectsize(anova_qm_h4b)
+
+# ---------------------- #
+# INTERACTION DECOMPOSED #
+# ---------------------- #
+# Other & Private
+lm_h4b_intcov_other_private <- lm(
+  formula   = morality_rating ~ partner_choice + transfer_ratio,
+  data      = dplyr::filter(df_h4b, self_other == "other" & public_private == "private"),
+  contrasts = list(partner_choice = "contr.sum"))
+car::Anova(lm_h4b_intcov_other_private, type = 3)
+
+# Other & Public
+lm_h4b_intcov_other_public <- lm(
+  formula   = morality_rating ~ partner_choice + transfer_ratio,
+  data      = dplyr::filter(df_h4b, self_other == "other" & public_private == "public"),
+  contrasts = list(partner_choice = "contr.sum"))
+car::Anova(lm_h4b_intcov_other_public, type = 3)
+```
+
+------------------------------------------------------------------------
+
+## X5: Exploratory Self/Other Analyses
+
+```{r exploratory-5-prep-data, message=F, warning=F}
+# --------- #
+# PREP DATA #
+# --------- #
+df_x5 <- df_h4b |> 
+  dplyr::mutate(
+    transfer_ratio_meancentered = scale(transfer_ratio, scale = F), .after = transfer_ratio)
+```
+
+### Linear Model
+
+```{r exploratory-5-lm, message=F, warning=F}
+# ------------ # 
+# LINEAR MODEL # 
+# ------------ # 
+lm_x5 <- lm(
+  formula   = morality_rating ~ self_other * transfer_ratio_meancentered, 
+  data      = df_x5,
+  contrasts = list(self_other = "contr.sum"))
+
+# -------------- # 
+# TYPE III ANOVA #
+# -------------- # 
+anova_lm_x5 <- car::Anova(lm_x5, type = 3)
+parameters::model_parameters(anova_lm_x5)
+effectsize::effectsize(anova_lm_x5)
+
+# ------------------------ #
+# ESTIMATED MARGINAL MEANS #
+# ------------------------ #
+table(df_x5$self_other)
+lm_x5_so_emm <- emmeans::emmeans(lm_x5, specs = ~self_other)
+parameters::model_parameters(lm_x5_so_emm)
+
+# -------------------- #
+# PAIRWISE COMPARISONS #
+# -------------------- #
+parameters::model_parameters(
+  emmeans::contrast(
+    object = lm_x5_so_emm,
+    method = "pairwise",
+    infer  = T, 
+    adjust = "none"))
+
+# --------------------------------- #
+# EFFECT SIZES FOR MEAN COMPARISONS #
+# --------------------------------- #
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = lm_x5_so_emm, 
+    sigma  = sigma(lm_x5), 
+    edf    = df.residual(lm_x5)))
+
+# ---------------------- #
+# INTERACTION DECOMPOSED #
+# ---------------------- #
+lm_so_int_self <- lm(
+  formula = morality_rating ~ transfer_ratio, 
+  data    = df_x5 |> dplyr::filter(self_other == "self"))
+parameters::model_parameters(lm_so_int_self)
+
+lm_so_int_other <- lm(
+  formula = morality_rating ~ transfer_ratio, 
+  data    = df_x5 |> dplyr::filter(self_other == "other"))
+parameters::model_parameters(lm_so_int_other)
+```
+
+### Curvilinear Model
+
+```{r exploratory-5-qm, message=F, warning=F} 
+# --------------- #
+# QUADRATIC MODEL #
+# --------------- #
+qm_x5 <- lm(
+  formula   = morality_rating ~ self_other * (transfer_ratio_meancentered + I(transfer_ratio_meancentered^2)), 
+  data      = df_x5,
+  contrasts = list(self_other = "contr.sum"))
+
+# -------------- #
+# TYPE III ANOVA #
+# -------------- #
+anova_qm_x5 <- car::Anova(qm_x5, type = 3)
+parameters::model_parameters(anova_qm_x5)
+effectsize::effectsize(anova_qm_x5)
+```
+
+## Model Comparison Statistics
+
+```{r main-text-model-comparison-statistics, message=F, warning=F}
+# ---------------- #
+# MODEL COMPARISON #
+# ---------------- #
+dplyr::bind_rows(
+  performance::compare_performance(lm_h2,  qm_h2),
+  performance::compare_performance(lm_h3a, qm_h3a),
+  performance::compare_performance(lm_h3b, qm_h3b),
+  performance::compare_performance(lm_h4a, qm_h4a),
+  performance::compare_performance(lm_h4b, qm_h4b),
+  performance::compare_performance(lm_x5,  qm_x5)) |> 
+  dplyr::mutate(
+    Model = dplyr::if_else(
+      stringr::str_starts(Name, 'lm'), 'Linear', 'Quadratic'))
+
+# ---------------------- # 
+# LIKELIHOOD RATIO TESTS #
+# ---------------------- # 
+lmtest::lrtest(lm_h2,  qm_h2)
+lmtest::lrtest(lm_h3a, qm_h3a)
+lmtest::lrtest(lm_h3b, qm_h3b)
+lmtest::lrtest(lm_h4a, qm_h4a)
+lmtest::lrtest(lm_h4b, qm_h4b)
+lmtest::lrtest(lm_x5,  qm_x5)
+```
+
+
+```{r write-anonymized-data, message=F, warning=F}
+# Write complete data to file
+df_complete |> 
+  dplyr::select(-c(
+    matches("submit"), income, education, ses_1_x, ses_1_y, ses, 
+    political_overall, political_overall_4_text, sexual_orientation,
+    sexual_orientation_9_text, religiosity, region, believe_real_better,
+    guess, technical, age, complete, comments_qs, sex, ethnicity_simplified,
+    country_of_birth, country_of_residence, nationality, language, student_status,
+    employment_status)) |> 
+  vroom::vroom_write(
+  here::here("pilot/data/clean/pilot-data-clean-complete-anonymized.csv"),
+  delim = ",")
+```
+
