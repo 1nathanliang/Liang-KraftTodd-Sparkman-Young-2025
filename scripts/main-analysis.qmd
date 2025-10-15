@@ -1,7 +1,7 @@
 ---
 title: "Statistical Analyses for Reputational Incentives Can Motivate Authentic Prosocial Signaling"
 author: "Nathan Liang"
-date: "October 31, 2023"
+date: "October 15, 2025"
 format: 
   html:
     code-fold: true
@@ -40,7 +40,27 @@ pacman::p_load(
   car, scales, lmtest, psych,
   
   # Visualize data
-  rlang, tune, sysfonts, ggplot2, ggrain, ggpp, ggtext, ggpattern, papaja)
+  patchwork, ggsignif, ggnewscale, ggblend,
+  rlang, sysfonts, ggplot2, ggpp, ggtext, fillpattern, papaja)
+```
+
+# Initialize Fonts for Plotting
+
+```{r load-fonts}
+# Load custom fonts
+sysfonts::font_add(
+  family  = "fa-solid", 
+  regular = "/User/nathan/Library/Fonts/Font Awesome 7 Free-Solid-900.otf")
+sysfonts::font_add(
+  family  = "Helvetica Neue LT 57 Condensed Bold",
+  regular = "/Users/nathan/Library/Fonts/HelveticaNeueLT57CondensedBold.ttf")
+sysfonts::font_add(
+  family  = "Helvetica Neue LT 57 Condensed",
+  regular = "/Users/nathan/Library/Fonts/HelveticaNeueLT57Condensed.ttf")
+
+# Set global showtext settings to display fonts correctly
+showtext::showtext_auto()
+showtext::showtext_opts(dpi = 300)
 ```
 
 ## Import Data
@@ -59,38 +79,64 @@ df_complete <- vroom::vroom(
 
 ## Set Custom Plotting Theme
 
-Compliant with Nature Human Behavior
-
-```{r plotting-defaults, message=F, warning=F}
-theme_nl <- function() {
+```{r plotting-defaults, message=F, warning=F, results="hide"}
+theme_aps <- function() {
   list(
     ggplot2::theme_bw() +
       ggplot2::theme(
-        axis.ticks           = ggplot2::element_line(size = 0.25),
-        axis.ticks.length    = ggplot2::unit(.05, units = "cm"),
-        text                 = ggplot2::element_text(family = "Arial"),
-        axis.title.x         = ggtext::element_markdown(
-          size = 6, margin = margin(t = 5)),
-        axis.text.x          = ggplot2::element_text(size = 5),
-        axis.title.y         = ggtext::element_markdown(size = 6, angle = 90),
-        axis.text.y          = ggplot2::element_text(size = 5),
-        panel.grid.major     = ggplot2::element_line(
-          size = 0.1, color = "darkgray"),
-        panel.grid.minor     = ggplot2::element_line(
-          size = 0.1, color = "darkgray"),
-        panel.border         = ggplot2::element_blank(),  # Remove all borders
-        axis.line.x          = ggplot2::element_line(
-          color = "black", linewidth = 0.25),  # bottom border
-        axis.line.y          = ggplot2::element_line(
-          color = "black", linewidth = 0.25),  # left border
-        strip.background     = ggplot2::element_rect(color = "#D9D9D9"),
-        strip.text           = ggplot2::element_text(size = 5, face = "bold"),
-        legend.title         = ggtext::element_markdown(size = 6),
-        legend.text          = ggplot2::element_text(size = 5),
+        text = ggplot2::element_text(
+          color  = "black", 
+          family = "Helvetica Neue LT 57 Condensed"),
+        axis.ticks = ggplot2::element_line(
+          color     = "black", 
+          linewidth = 0.25),
+        axis.ticks.length = ggplot2::unit(.05, units = "cm"),
+        axis.title.x = ggtext::element_markdown(
+          color  = "black",
+          size   = 10,
+          margin = margin(t = 10)),
+        axis.text.x = ggplot2::element_text(
+          color = "black",
+          size  = 9),
+        axis.title.y = ggtext::element_markdown(
+          size   = 10, 
+          angle  = 90,
+          margin = margin(r = 7.5)),
+        axis.text.y = ggplot2::element_text(
+          color = "black",
+          size  = 9),
+        axis.line.x  = ggplot2::element_line(
+          color     = "black", 
+          linewidth = 0.25),
+        axis.line.y = ggplot2::element_line(
+          color     = "black", 
+          linewidth = 0.25),
+        panel.grid.major = ggplot2::element_blank(),
+        panel.grid.minor = ggplot2::element_blank(),
+        panel.border = ggplot2::element_rect(
+          color     = "black",
+          linewidth = 0.25),
+        strip.background = ggplot2::element_rect(
+          color     = "black", 
+          linewidth = 0.25),
+        strip.text           = ggplot2::element_text(size = 10),
+        legend.title         = ggtext::element_markdown(size = 10),
+        legend.text          = ggplot2::element_text(size = 9),
         legend.key.size      = ggplot2::unit(.75, "line"),
         legend.justification = "center",
         legend.position      = "bottom",
         legend.box           = "horizontal"))
+}
+```
+
+## Custom Icon Wrapper Function
+
+```{r icon-wrapper-function}
+IconWrapper <- function(icon, font_size = 7) {
+  paste0(
+    "<span style='font-family:\"fa-solid\"; font-size:", font_size, "pt;'>",
+    icon,
+    "</span>")
 }
 ```
 
@@ -115,7 +161,7 @@ df_complete <- df_complete |>
         race_ethnicity == "Prefer not to disclose" ~ NA,
         race_ethnicity == "Native Hawaiian or other Pacific Islander" ~ "NH/PI",
         race_ethnicity == "Indigenous American or Alaskan Native" ~ "IA/AN",
-        race_ethnicity == "Hispanic/Latino/a/e" ~ "H/L",
+        race_ethnicity == "White or Caucasian" ~ "White",
         race_ethnicity == "Black or African American" ~ "B/AA",
         race_ethnicity == "Asian or Asian American" ~ "A/AA",
         .default = race_ethnicity)),
@@ -171,8 +217,10 @@ df_complete <- df_complete |>
         employment,
         "Employed full time (30+ hrs/week)" ~ "Full-time",
         "Employed part-time (>30 hrs/week)" ~ "Part-time",
-        "Unemployed and currently looking for work" ~ "Unemployed but applying",
-        "Unemployed and not currently looking for work" ~ "Unemployed and not applying",
+        "Unemployed and currently looking for work" ~ 
+          "Unemployed but applying",
+        "Unemployed and not currently looking for work" ~ 
+          "Unemployed and not applying",
         "Self-Employed"  ~ "Self-employed",
         "Unable to work" ~ "Unable to Work",
         .default = employment), 
@@ -199,157 +247,13 @@ df_complete <- df_complete |>
 
 ------------------------------------------------------------------------
 
-# Descriptives
-
-## Demographics
-
-::: {.panel-tabset .nav-pills}
-### Race/Ethnicity and Gender
-
-```{r demographics-race-ethnicity-gender, message=F, warning=F, echo=F}
-# Descriptive statistics for race/ethnicity
-df_complete |> 
-  dplyr::select(race_ethnicity) |>
-  dplyr::summarize(
-    percent_total = n() / nrow(df_complete) * 100, 
-    .by = race_ethnicity) |>
-  dplyr::arrange(race_ethnicity, desc(percent_total)) |> 
-  knitr::kable(
-    col.names = c("Race/Ethnicity", "Percent"),
-    digits    = c(0, 2))
-
-# Descriptive statistics for gender
-df_complete |> 
-  dplyr::select(gender) |>
-  dplyr::summarize(
-    percent_total = n() / nrow(df_complete) * 100, 
-    .by = gender) |> 
-  dplyr::arrange(gender, desc(percent_total)) |> 
-  knitr::kable(
-    col.names = c("Gender", "Percent"),
-    digits    = c(0, 2))
-
-# Plot bar chart of race/ethnicity broken down by gender
-
-df_complete |> 
-  dplyr::select(race_ethnicity, gender) |> 
-  tidyr::drop_na() |>
-  ggplot2::ggplot(ggplot2::aes(x = race_ethnicity, fill = gender)) + 
-  ggplot2::geom_bar(position = position_dodge()) +
-  ggplot2::labs(
-    title = "Race/Ethnicity by Gender Distribution",
-    x     = "Race/Ethnicity",
-    y     = "Count",
-    fill  = "Gender") + 
-  ggplot2::scale_fill_manual(values = c("#00A9FF", "#ED68ED", "#8494FF")) +
-  theme_nl()
-```
-
-### Age
-
-```{r demographics-age, message=F, warning=F, echo=F}
-# Descriptive statistics table for age
-df_complete |> 
-  dplyr::select(age) |> 
-  rstatix::get_summary_stats() |> 
-  knitr::kable(
-    col.names = c(
-      "Variable", "n", "Min", "Max", "Median", "Q1", "Q3", "IQR", 
-      "MAD", "Mean", "SD", "SE", "95% CI"),
-    digits = c(rep(0, 8), rep(2, 5)))
-
-# Plot participant age frequency distribution
-df_complete |> 
-  dplyr::select(age) |> 
-  ggplot2::ggplot(ggplot2::aes(x = age)) + 
-  ggplot2::geom_bar() +
-  ggplot2::labs(
-    title = "Age Distribution",
-    x     = "Age",
-    y     = "Count") + 
-  theme_nl()
-```
-
-### Income
-
-```{r demographics-income, message=F, warning=F, echo=F}
-# Plot income distribution
-df_complete |> 
-  dplyr::select(income) |> 
-  tidyr::drop_na() |>
-  ggplot2::ggplot(ggplot2::aes(x = income)) + 
-  ggplot2::geom_bar() +
-  ggplot2::labs(
-    title = "Income Distribution",
-    x     = "Income",
-    y     = "Count") + 
-  theme_nl() +
-  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45))
-```
-
-### Education
-
-```{r demographics-education, message=F, warning=F, echo=F}
-# Plot education level distribution
-df_complete |> 
-  dplyr::select(education) |> 
-  tidyr::drop_na() |>
-  ggplot2::ggplot(ggplot2::aes(x = education)) + 
-  ggplot2::geom_bar() +
-  ggplot2::labs(
-    title = "Education Distribution",
-    x     = "Education",
-    y     = "Count") + 
-  theme_nl() +
-  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45))
-```
-
-### Employment
-
-```{r demographics-employment, message=F, warning=F, echo=F}
-# Plot employment status distribution
-df_complete |> 
-  dplyr::select(employment) |> 
-  tidyr::drop_na() |>
-  ggplot2::ggplot(ggplot2::aes(x = employment)) + 
-  ggplot2::geom_bar() +
-  ggplot2::labs(
-    title = "Employment Status Distribution",
-    x     = "Employment Status",
-    y     = "Count") + 
-  theme_nl() +
-  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45))
-```
-
-### Political Affiliation
-
-```{r demographics-political-affiliation, message=F, warning=F, echo=F}
-# Plot political affiliation distribution
-df_complete |> 
-  dplyr::select(political_overall) |> 
-  tidyr::drop_na() |>
-  ggplot2::ggplot(
-    ggplot2::aes(
-      x    = political_overall,
-      fill = political_overall)) + 
-  ggplot2::geom_bar() +
-  ggplot2::labs(
-    title = "Political Affiliation Distribution",
-    x     = "Political Affiliation",
-    y     = "Count") + 
-  ggplot2::guides(fill = "none") +
-  ggplot2::scale_fill_manual(values = c("#F8766D", "#35A2FF", "#8494FF", "#39B600")) +
-  theme_nl()
-```
-:::
-
-------------------------------------------------------------------------
-
 # Main Text Analyses
 
 ## H1: "Expressed as Signal"
 
 ### Modeling Game Behavior
+
+#### Prep Data
 
 ```{r hypothesis-1-prep-data, message=F, warning=F}
 # --------- #
@@ -377,8 +281,7 @@ df_h1 <- df_complete |>
 
 ```{r hypothesis-1-lm, message=F, warning=F}
 #| lst-label: h1-lm
-#| lst-cap: H1 Game Behavior
-
+#| lst-cap: H1 Game Behavior Linear Model
 # ------------ #
 # LINEAR MODEL #
 # ------------ #
@@ -394,17 +297,18 @@ lm_h1 <- lm(
 # -------------- #
 anova_lm_h1 <- car::Anova(lm_h1, type = 3)
 parameters::model_parameters(anova_lm_h1)
-effectsize::effectsize(anova_lm_h1)
+effectsize::effectsize(anova_lm_h1, alternative = "two.sided") |> 
+  knitr::kable(digits = c(0, 3, 2, 3, 3))
 
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(df_h1$public_private)
+table(df_h1$public_private)
 lm_h1_obs_emm <- emmeans::emmeans(lm_h1, specs = ~public_private)
 parameters::model_parameters(lm_h1_obs_emm)
-             
-# table(df_h1$partner_choice)
-lm_h1_pc_emm  <- emmeans::emmeans(lm_h1, specs = ~partner_choice)
+
+table(df_h1$partner_choice)
+lm_h1_pc_emm <- emmeans::emmeans(lm_h1, specs = ~partner_choice)
 parameters::model_parameters(lm_h1_pc_emm)
 
 # -------------------- #
@@ -415,7 +319,7 @@ parameters::model_parameters(
   emmeans::contrast(
     object = lm_h1_obs_emm, 
     method = "pairwise", 
-    infer  = T, 
+    infer  = T,
     adjust = "none"))
 
 # Partner Choice: Yes - No
@@ -423,7 +327,7 @@ parameters::model_parameters(
   emmeans::contrast(
     object = lm_h1_pc_emm, 
     method = "pairwise", 
-    infer  = T, 
+    infer  = T,
     adjust = "none"))
 
 # --------------------------------- #
@@ -446,72 +350,326 @@ parameters::model_parameters(
 
 #### Data Visualization
 
-```{r hypothesis-1-data-vis, message=F, warning=F}
-# -------- #
-# DATA VIS #
-# -------- #
+```{r hypothesis-h1a-data-vis}
+#| lst-label: h1a-data-vis
+#| lst-cap: H1a Game Behavior Observabilty Data Visualization
+# ----------------------- #
+# DATA VIS: OBSERVABILITY #
+# ----------------------- #
 set.seed(42)
-h1_vis <- emmeans::emmeans(lm_h1, specs = ~public_private:partner_choice) |> 
-  as.data.frame() |> janitor::clean_names('snake') |> 
+h1a_vis <- emmeans::emmeans(lm_h1, specs = ~public_private) |>
+  as.data.frame() |> 
+  janitor::clean_names('snake') |>
+  tidyr::drop_na() |> 
   ggplot2::ggplot(
-    ggplot2::aes(
-      x             = partner_choice, 
-      y             = emmean, 
-      fill          = partner_choice, 
-      color         = partner_choice,
-      pattern       = public_private,
-      pattern_color = partner_choice)) +
-  ggplot2::labs(x = "**Partner Choice**", y = "**Mean DG Allocation ($)**") +
-  ggpattern::geom_bar_pattern(
-    ggplot2::aes(color = partner_choice),
-    alpha                    = 0.4,
-    width                    = 0.75,
-    stat                     = "identity",
-    position                 = position_dodge(width = 1),
-    pattern_size             = 0.25,
-    pattern_fill             = "white",
-    pattern_angle            = 45,
-    pattern_density          = 0.1,
-    pattern_spacing          = 0.025,
-    pattern_key_scale_factor = 0.6) + 
-  ggplot2::geom_errorbar(
-    ggplot2::aes(ymin = lower_cl, ymax = upper_cl), 
-    position = position_dodge(width = 1), width = 0.2, color = "black") +
-  # Raw Data
+    ggplot2::aes(x = public_private, y = emmean),
+    color = "#4f46e5", 
+    fill  = "#4f46e5") +
+  ggplot2::labs(
+    x = "Observability", 
+    y = "Mean Dictator Game Send ($)") +
+  
+  # Bar Plot
+  ggplot2::geom_bar(
+    ggplot2::aes(alpha = public_private),
+    color     = "#4f46e5",
+    fill      = "#4f46e5",
+    stat      = "summary", 
+    fun       = mean, 
+    width     = 0.75, 
+    linewidth = 0.5) +
+  ggplot2::scale_alpha_manual(values = c(Public = 0.1, Private = 0.6)) +
+  
+  # Manual Aesthetics Mappings
+  ggplot2::guides(alpha = "none") +
+  
+  # Raw Data as Jitter
   ggplot2::geom_jitter(
-    data = df_h1, ggplot2::aes(y = dg_a_gen_transfer),
-    stroke = 0, alpha = 0.3, size = 0.5,
-    position = ggplot2::position_jitterdodge(.25, 0.01, dodge.width = 1)) +
-  ggpattern::scale_pattern_manual(
-    values = c(Public = "none", Private = "stripe")) +
-  ggplot2::scale_color_manual(
-    values = c(No = "#D55E00", Yes = "#0091e3")) +
-  ggplot2::scale_fill_manual(
-    values = c(No = "#D55E00", Yes = "#0091e3")) +
-  ggpattern::scale_pattern_color_manual(
-    values = c(No = "#D55E00", Yes = "#0091e3")) +
+    ggplot2::aes(y = dg_a_gen_transfer),
+    data     = df_h1,
+    color    = "#4f46e5",
+    fill     = "#4f46e5",
+    stroke   = 0, 
+    size     = 0.5, 
+    alpha    = 0.35,
+    position = ggplot2::position_jitter(.05, 0.01)) * 
+  (ggblend::blend("lighten") + ggblend::blend("multiply", alpha = 0.2)) +
+  
+  # Box Plot
+  ggplot2::geom_boxplot(
+    ggplot2::aes(x = public_private, y = dg_a_gen_transfer),
+    color        = "#4f46e5",
+    fill         = "#4f46e5",
+    width        = 0.3, 
+    alpha        = 0.25,
+    outlier.size = 0.25, linewidth = 0.25,
+    position     = ggplot2::position_dodge(width = 0.8), 
+    data         = df_h1, 
+    show.legend  = F) +
+  
+  # Violin Plot
+  ggplot2::geom_violin(
+    ggplot2::aes(x = public_private, y = dg_a_gen_transfer),
+    color       = "#4f46e5",
+    fill        = "#4f46e5",
+    width       = 0.7, 
+    alpha       = 0.25, 
+    linewidth   = 0,
+    position    = ggplot2::position_dodge(width = 0.8), 
+    data        = df_h1, 
+    show.legend = F) +
+  
+  # Error Bars
+  ggplot2::geom_errorbar(
+    ggplot2::aes(ymin = lower_cl, ymax = upper_cl),
+    position = ggplot2::position_dodge(width = 1), 
+    width    = 0.15, 
+    color    = "black") +
+  
+  # Mean Point Estimates
+  ggplot2::geom_point(
+    ggplot2::aes(x = public_private, y = emmean),
+    position = ggplot2::position_dodge(width = 1), 
+    size     = 0.75, 
+    color    = "black") +
+  
+  # Axis Limits
   ggplot2::scale_y_continuous(
-    limits = c(0, 0.50), breaks = seq(0, 0.50, by = 0.05), minor_breaks = NULL) +
-  theme_nl() +
-  ggplot2::theme(panel.grid.major.x = element_blank()) +
+    limits       = c(0, 0.7), 
+    breaks       = seq(0, 0.6, by = 0.1), 
+    minor_breaks = NULL,
+    labels       = scales::number_format(accuracy = 0.01),
+    expand       = c(0, 0)) +
+  ggplot2::coord_cartesian(ylim = c(0, 0.575), clip = "off") +
+  
+  theme_aps() +
   ggplot2::guides(
     fill = "none", color = "none", pattern = "none", pattern_color = "none") +
-  ggplot2::facet_wrap(~public_private)
+  ggsignif::geom_signif(
+    size = 0.25,
+    family = "Helvetica Neue LT 57 Condensed",
+    y_position = 0.5,
+    comparisons = list(c("Private", "Public")),
+    annotations  = c("***"),
+    color = "black", textsize = 3, 
+    vjust = 0.5, hjust = 0.5, tip_length = 0)
 
 # Display Figure
-h1_vis
+h1a_vis
+```
+
+
+```{r hypothesis-1b-data-vis}
+#| lst-label: h1b-data-vis
+#| lst-cap: H1b Game Behavior Partner Choice Data Visualization
+# ------------------------ #
+# DATA VIS: PARNTER CHOICE #
+# ------------------------ #
+set.seed(42)
+h1b_vis <- emmeans::emmeans(lm_h1, specs = ~partner_choice) |>
+  as.data.frame() |> janitor::clean_names('snake') |>
+  ggplot2::ggplot(
+    ggplot2::aes(
+      x     = partner_choice,
+      y     = emmean,
+      fill  = partner_choice,
+      color = partner_choice)) +
+  ggplot2::labs(
+    x = "Partner Choice", 
+    y = "Mean Dictator Game Send ($)") +
+  ggplot2::geom_bar(
+    stat = "summary", fun = mean, width = 0.75, linewidth = 0.5) +
+  
+  fillpattern::scale_fill_pattern(
+    bg = c("No"  = "#e6904c80",
+           "Yes" = "#69c3f580"),
+    fg = c("No"  = "#D55E0080",
+           "Yes" = "#0072B280"),
+    patterns = "stripe45_0.25") +
+  
+  ggplot2::guides(fill = "none") +
+  ggnewscale::new_scale_fill() +
+  
+  # Jitter (Raw Data)
+  ggplot2::geom_jitter(
+    data = df_h1, ggplot2::aes(y = dg_a_gen_transfer),
+    stroke = 0, alpha = 0.35, size = 0.5,
+    position = ggplot2::position_jitterdodge(.1, 0.01, dodge.width = 1)) *
+  (ggblend::blend("lighten") + ggblend::blend("multiply", alpha = 0.2)) +
+  
+  # Box Plot
+  ggplot2::geom_boxplot(
+    inherit.aes = F,
+    ggplot2::aes(
+      x = partner_choice, y = dg_a_gen_transfer,
+      fill = partner_choice, color = partner_choice),
+    width = 0.3, alpha = 0.25, outlier.size = 0.5, linewidth = 0.25,
+    data = df_h1, show.legend = F) +
+  
+  # Violin Plot
+  ggplot2::geom_violin(
+    inherit.aes = F,
+    ggplot2::aes(
+      x = partner_choice, y = dg_a_gen_transfer,
+      fill = partner_choice, color = partner_choice),
+    width = 0.7, alpha = 0.25, linewidth = 0,
+    data = df_h1, show.legend = F) +
+  
+  # Error Bars
+  ggplot2::geom_errorbar(
+    ggplot2::aes(ymin = lower_cl, ymax = upper_cl),
+    width = 0.15, color = "black") +
+  
+  # Mean Point Estimates
+  ggplot2::geom_point(
+    ggplot2::aes(x = partner_choice, y = emmean),
+    size = 0.75, color = "black") +
+  
+  # Axis Limits
+  ggplot2::scale_y_continuous(
+    limits = c(0, 0.6), breaks = seq(0, 0.6, by = 0.10), minor_breaks = NULL,
+    labels = scales::number_format(accuracy = 0.01),
+    expand = c(0, 0)) +
+  ggplot2::coord_cartesian(ylim = c(0, 0.575), clip = "off") +
+  
+  # Significance Annotations
+  ggsignif::geom_signif(
+    family      = "Helvetica Neue LT 57 Condensed",
+    size        = 0.25,
+    y_position  = 0.5,
+    comparisons = list(c("No", "Yes")),
+    annotations = c("NS."),
+    color       = "black", 
+    textsize    = 2, 
+    vjust       = 0.1, 
+    hjust       = 0.5, 
+    tip_length  = 0) +
+  
+  # Manual Aesthetics Mappings
+  ggplot2::guides(
+    fill = "none", color = "none", pattern = "none", pattern_color = "none") +
+  ggplot2::scale_color_manual(
+    values = c(No = "#D55E00", Yes = "#0072B2")) +
+  ggplot2::scale_fill_manual(
+    values = c(No = "#D55E00", Yes = "#0072B2")) +
+  theme_aps()
+
+# Display Figure
+h1b_vis
+```
+
+```{r hypothesis-1c-data-vis}
+#| lst-label: h1c-data-vis
+#| lst-cap: H1c Game Behavior Observability x Partner Choice Data Visualization
+# --------------------- #
+# DATA VIS: INTERACTION #
+# --------------------- #
+set.seed(42)
+h1c_vis <- emmeans::emmeans(lm_h1, specs = ~public_private:partner_choice) |>
+  as.data.frame() |> janitor::clean_names('snake') |>
+  ggplot2::ggplot(
+    ggplot2::aes(
+      x             = partner_choice,
+      y             = emmean,
+      fill          = partner_choice,
+      color         = partner_choice)) +
+  ggplot2::labs(
+    x     = "Partner Choice", 
+    y     = "Mean Dictator Game Send ($)",
+    color = "Partner Choice",
+    fill  = "Partner Choice") +
+  
+  ggplot2::geom_bar(
+    aes(fill = partner_choice, color = partner_choice, alpha = public_private),
+    stat = "summary", fun = mean, width = 0.75, linewidth = 0.5) +
+  
+  ggplot2::scale_alpha_manual(values = c(Public = 0.1, Private = 0.6)) +
+  
+  # Jitter (Raw Data)
+  ggplot2::geom_jitter(
+    inherit.aes = F,
+    data = df_h1, ggplot2::aes(
+      x = partner_choice, y = dg_a_gen_transfer,
+      fill = partner_choice, color = partner_choice),
+    stroke = 0, alpha = 0.35, size = 0.5,
+    position = ggplot2::position_jitterdodge(.25, 0.01, dodge.width = 1)) * 
+  (ggblend::blend("lighten") + ggblend::blend("multiply", alpha = 0.2)) +
+  
+  # Boxplot
+  ggplot2::geom_boxplot(
+    inherit.aes = F,
+    ggplot2::aes(
+      x = partner_choice, y = dg_a_gen_transfer,
+      fill = partner_choice, color = partner_choice),
+    width = 0.3, alpha = 0.25, outlier.size = 0.25, linewidth = 0.25,
+    position = ggplot2::position_dodge(width = 0.8), data = df_h1, show.legend = F) +
+  
+  # Violin
+  ggplot2::geom_violin(
+    inherit.aes = F,
+    ggplot2::aes(
+      x = partner_choice, y = dg_a_gen_transfer,
+      fill = partner_choice, color = partner_choice),
+    width = 0.7, alpha = 0.25, linewidth = 0,
+    position = position_dodge(width = 0.8), data = df_h1, show.legend = F) +
+  
+  # Error Bars and Mean Point Estimates
+  ggplot2::geom_errorbar(
+    ggplot2::aes(ymin = lower_cl, ymax = upper_cl),
+    position = position_dodge(width = 1), width = 0.15, color = "black",
+    linewidth = 0.5) +
+  ggplot2::geom_point(
+    ggplot2::aes(x = partner_choice, y = emmean),
+    position = position_dodge(width = 1), size = 1, color = "black") +
+  
+  # Axis Limits
+  ggplot2::scale_y_continuous(
+    limits = c(0, 0.7), breaks = seq(0, 0.50, by = 0.10), minor_breaks = NULL,
+    labels = scales::number_format(accuracy = 0.01),
+    expand = c(0, 0)) +
+  ggplot2::coord_cartesian(ylim = c(0, 0.55), clip = "off") +
+  ggplot2::scale_fill_manual(
+    values = c(No = "#D55E00", Yes = "#0072B2")) +
+  ggplot2::scale_color_manual(
+    values = c(No = "#D55E00", Yes = "#0072B2")) +
+  
+  # Manual Aesthetics Mapping
+  ggplot2::guides(fill = "none", color = "none", alpha = "none") +
+  ggplot2::facet_wrap(~public_private) +
+  
+  # Custom Theme
+  theme_aps()
+
+# Display Figure
+h1c_vis
+```
+
+```{r hypothesis-1abc-data-vis}
+#| lst-label: h1abc-data-vis
+#| lst-cap: H1a-c Game Behavior Data Visualizations
+# Combine Plots
+h1_vis_all <- ((h1a_vis / h1b_vis) | h1c_vis) + 
+  patchwork::plot_layout(
+    widths = c(2, 6), heights = c(8, 8),
+    axis_titles = "collect", axes = "collect") +
+  patchwork::plot_annotation(tag_levels = "a")
 
 # Save Figure
 ggplot2::ggsave(
   filename = here::here("main/figures/hypothesis-1-data-vis.png"),
-  plot     = h1_vis, 
-  width    = 3, 
-  height   = 3, 
+  plot     = h1_vis_all,
+  width    = 8,
+  height   = 6,
   dpi      = 300)
-
-# Delete Figure Object
-rm(h1a_vis)
 ```
+
+### Delete H1 Objects
+
+```{r delete-h1-data}
+rm(lm_h1, h1_vis, h1a_vis, h1b_vis, h1c_vis, h1_vis_all,
+   anova_lm_h1, lm_h1_obs_emm, lm_h1_pc_emm)
+```
+
 
 ------------------------------------------------------------------------
 
@@ -519,17 +677,24 @@ rm(h1a_vis)
 
 ### Modeling Game Behavior
 
-```{r hypothesis-2-prep-data, message=F, warning=F}
-#| lst-label: hypothesis2-lm
-#| lst-cap: H2 Game Behavior
+#### Prep Data
 
+Does actors' generosity in the DG predict how much they *actually* return? 
+We will select only participants A, A1, A2, and C for this analysis so as to
+remove redundant group-level response (i.e., Participants B didn't play in
+this game).
+
+```{r hypothesis-2-prep-data, message=F, warning=F}
+#| lst-label: h2-data-prep
+#| lst-cap: H2 Game Behavior Data Preparation
 # --------- #
 # PREP DATA #
 # --------- #
 df_h2 <- df_complete |> 
   dplyr::filter(!stringr::str_starts(participant_role, "B")) |>
   dplyr::select(
-    unique_group_id, participant_role, public_private, partner_choice,
+    unique_group_id, participant_role, 
+    public_private, partner_choice,
     dg_a_chosen_transfer_ratio, tg_a_return_ratio) |> 
   dplyr::group_by(unique_group_id) |> 
   dplyr::mutate(
@@ -549,11 +714,15 @@ df_h2 <- df_complete |>
 #### Linear Model
 
 ```{r hypothesis-2-lm, message=F, warning=F}
+#| lst-label: h2-lm
+#| lst-cap: H2 Game Behavior Linear Model
 # ------------ #
 # LINEAR MODEL #
 # ------------ #
 lm_h2 <- lm(
-  formula   = tg_a_return_ratio ~ public_private + partner_choice + dg_a_chosen_transfer_ratio, 
+  formula   = tg_a_return_ratio ~ public_private 
+  + partner_choice
+  + dg_a_chosen_transfer_ratio, 
   data      = df_h2,
   contrasts = list(
     public_private = "contr.sum", 
@@ -564,7 +733,7 @@ lm_h2 <- lm(
 # -------------- #
 anova_lm_h2 <- car::Anova(lm_h2, type = 3)
 parameters::model_parameters(anova_lm_h2)
-effectsize::effectsize(anova_lm_h2)
+effectsize::effectsize(anova_lm_h2) |> as.data.frame()
 
 # ---------------------- #
 # AVERAGE MARGINAL TREND #
@@ -575,14 +744,14 @@ parameters::model_parameters(
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(df_h2$public_private)
 # Observability: Public - Private
+table(df_h2$public_private)
 lm_h2_obs_emm <- emmeans::emmeans(lm_h2, specs = ~public_private)
 parameters::model_parameters(lm_h2_obs_emm)
 
-# table(df_h2$partner_choice)
 # Partner Choice: Yes - No
-lm_h2_pc_emm  <- emmeans::emmeans(lm_h2, specs = ~partner_choice)
+table(df_h2$partner_choice)
+lm_h2_pc_emm <- emmeans::emmeans(lm_h2, specs = ~partner_choice)
 parameters::model_parameters(lm_h2_pc_emm)
 
 # -------------------- #
@@ -610,26 +779,31 @@ parameters::model_parameters(
 # Observability: Public - Private (Cohen's d)
 parameters::model_parameters(
   emmeans::eff_size(
-    object = lm_h2_obs_emm, 
-    sigma  = sigma(lm_h2), 
+    object = lm_h2_obs_emm,
+    sigma  = sigma(lm_h2),
     edf    = df.residual(lm_h2)))
 
 # Partner Choice: Yes - No (Cohen's d)
 parameters::model_parameters(
   emmeans::eff_size(
-    object = lm_h2_pc_emm, 
-    sigma  = sigma(lm_h2), 
+    object = lm_h2_pc_emm,
+    sigma  = sigma(lm_h2),
     edf    = df.residual(lm_h2)))
 ```
 
 #### Curvilinear Model
 
 ```{r hypothesis-2-qm, message=F, warning=F}
+#| lst-label: h2-qm
+#| lst-cap: H2 Game Behavior Quadratic Model
 # --------------- #
 # QUADRATIC MODEL #
 # --------------- #
 qm_h2 <- lm(
-  formula   = tg_a_return_ratio ~ public_private + partner_choice + dg_a_chosen_transfer_ratio + I(dg_a_chosen_transfer_ratio^2), 
+  formula   = tg_a_return_ratio ~ public_private 
+  + partner_choice 
+  + dg_a_chosen_transfer_ratio 
+  + I(dg_a_chosen_transfer_ratio^2), 
   data      = tidyr::drop_na(df_h2, dg_a_chosen_transfer_ratio),
   contrasts = list(
     public_private = "contr.sum", 
@@ -647,18 +821,18 @@ parameters::model_parameters(
 # -------------- #
 anova_qm_h2 <- car::Anova(qm_h2, type = 3)
 parameters::model_parameters(anova_qm_h2)
-effectsize::effectsize(anova_qm_h2)
+effectsize::effectsize(anova_qm_h2) |> as.data.frame()
 
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(df_h2$public_private)
 # Observability: Public - Private
+table(df_h2$public_private)
 qm_h2_obs_emm <- emmeans::emmeans(qm_h2, specs = ~public_private)
 parameters::model_parameters(qm_h2_obs_emm)
 
-# table(df_h2$partner_choice)
 # Partner Choice: Yes - No
+table(df_h2$partner_choice)
 qm_h2_pc_emm  <- emmeans::emmeans(qm_h2, specs = ~partner_choice)
 parameters::model_parameters(qm_h2_pc_emm)
 
@@ -702,15 +876,26 @@ parameters::model_parameters(
 #### Data Visualization
 
 ```{r hypothesis-2-visualize, message=F, warning=F}
+#| lst-label: h2-data-vis
+#| lst-cap: H2 Game Behavior Data Visualization
+
+# Axis Labels
+h2_vis_x_title <- paste0(
+  "Dictator Game Send Ratio (A ", IconWrapper("\uf178"), " B)")
+
+h2_vis_y_title <- paste0(
+  "Trust Game Return Ratio (C ", IconWrapper("\uf177"), " A)")
+
+# Model Predicted EMM
 set.seed(42)
 qm_h2_vis <- emmeans::emmeans(
-  qm_h2, 
-  specs    = ~public_private:partner_choice, 
+  qm_h2,
+  specs    = ~public_private:partner_choice,
   cov.keep = "dg_a_chosen_transfer_ratio",
   at       = list(dg_a_chosen_transfer_ratio = seq(0, 1.00, by = 0.01)),
-  by       = "dg_a_chosen_transfer_ratio") |> 
-  as.data.frame() |> 
-  janitor::clean_names('snake') |> 
+  by       = "dg_a_chosen_transfer_ratio") |>
+  as.data.frame() |>
+  janitor::clean_names('snake') |>
   dplyr::mutate(
     public_private = dplyr::case_when(
       public_private == "public"  ~ "Public",
@@ -725,35 +910,66 @@ qm_h2_vis <- emmeans::emmeans(
       linetype = public_private,
       fill     = partner_choice,
       color    = partner_choice)) +
-  ggplot2::geom_jitter(
-    ggplot2::aes(y = tg_a_return_ratio),
+  
+  # Raw Data as Jitter
+  ggplot2::geom_point(
+    ggplot2::aes(
+      x = dg_a_chosen_transfer_ratio_jittered,
+      y = tg_a_return_ratio_jittered),
     data = dplyr::mutate(
       df_h2,
+      dg_a_chosen_transfer_ratio_jittered = pmax(
+        0.02, 
+        pmin(1 - 0.02, 
+             dg_a_chosen_transfer_ratio + runif(n(), -0.075, 0.075))),
+      tg_a_return_ratio_jittered = pmax(
+        0.06, 
+        pmin(3 - 0.06,
+             tg_a_return_ratio + runif(n(), -0.225, 0.225))),
       public_private = dplyr::case_when(
         public_private == "public"  ~ "Public",
         public_private == "private" ~ "Private"),
       partner_choice = dplyr::case_when(
         partner_choice == "no"  ~ "No",
         partner_choice == "yes" ~ "Yes")),
-    width = .025, height = .025, stroke = 0, alpha = 0.3, size = 1) +
+    stroke = 0, alpha = 0.5, size = 1) +
+  
+  # Model Prediction Line and Confidence Interval
   ggplot2::geom_line(alpha = 1, linewidth = .5) +
   ggplot2::geom_ribbon(
-    ggplot2::aes(ymin = lower_cl, ymax = upper_cl), alpha = 0.4, linewidth = 0) +
+    ggplot2::aes(ymin = lower_cl, ymax = upper_cl), 
+    alpha = 0.2, linewidth = 0) +
+  
+  # Axis Labels and Faceting
   ggplot2::labs(
-    x     = "**TG Partner's DG Send Ratio: A\\* ⇒ B**",
-    y     = "**TG Return Ratio: C ⇐ A\\***",
-    fill  = "**Partner Choice**",
-    color = "**Partner Choice**") +
+    x     = h2_vis_x_title,
+    y     = h2_vis_y_title, 
+    fill  = "Partner Choice",
+    color = "Partner Choice") +
   ggplot2::facet_wrap(~public_private) +
-  ggplot2::scale_y_continuous(labels = scales::label_number(accuracy = 0.01)) +
-  ggplot2::scale_x_continuous(labels = scales::label_number(accuracy = 0.01)) +
+  
+  # Manual Aesthetics Mappings and Theme
   ggplot2::scale_linetype_manual(
-    values = c("Public" = "solid", "Private" = "1111")) +
+    values = c("Public" = "solid", "Private" = "2222")) +
   ggplot2::scale_color_manual(values = c("#D55E00", "#0072B2")) +
-  ggplot2::scale_fill_manual(values  = c("#D55E00", "#0072B2")) +
+  ggplot2::scale_fill_manual(values = c("#D55E00", "#0072B2")) +
   ggplot2::scale_shape_manual(values = c("square", "circle")) +
-  theme_nl() +
-  ggplot2::guides(linetype = "none")
+  theme_aps() +
+  ggplot2::theme(panel.spacing = unit(0.5, "cm")) +
+  ggplot2::guides(linetype = "none") +
+  
+  # Axis Limits
+  ggplot2::scale_x_continuous(
+    expand = c(0, 0),
+    oob    = scales::oob_squish,
+    breaks = c(0, 0.25, 0.5, 0.75, 1),
+    labels = c("0", "0.25", "0.5", "0.75", "1")) +
+  ggplot2::scale_y_continuous(
+    expand = c(0, 0),
+    oob    = scales::oob_squish,
+    labels = scales::label_number(accuracy = 1)) +
+  ggplot2::coord_cartesian(
+    xlim = c(0, 1), ylim = c(0, 3), clip = "off")
 
 # Display Figure
 qm_h2_vis
@@ -762,12 +978,12 @@ qm_h2_vis
 ggplot2::ggsave(
   filename = here::here("main/figures/hypothesis-2-data-vis.png"),
   plot     = qm_h2_vis,
-  width    = 5,
-  height   = 3,
+  width    = 6,
+  height   = 4,
   dpi      = 300)
 
-# Delete Figure Object
-rm(qm_h2_vis)
+# Delete Figure Object and Axis Titles
+rm(qm_h2_vis, h2_vis_x_title, h2_vis_y_title)
 ```
 
 ------------------------------------------------------------------------
@@ -776,6 +992,8 @@ rm(qm_h2_vis)
 
 ### Modeling Game Behavior
 
+#### Prep Data
+
 ```{r hypothesis-3a-prep-data, message=F, warning=F}
 # --------- #
 # PREP DATA #
@@ -783,7 +1001,8 @@ rm(qm_h2_vis)
 df_h3a <- df_complete |>
   dplyr::filter(!stringr::str_starts(participant_role, "B")) |>
   dplyr::select(
-    unique_group_id, participant_role, public_private, partner_choice,
+    unique_group_id, participant_role, 
+    public_private, partner_choice,
     dg_a_chosen_transfer, tg_c_transfer) |> 
   dplyr::group_by(unique_group_id) |> 
   dplyr::mutate(
@@ -820,6 +1039,8 @@ effectsize::effectsize(lm_h3a)
 #### Curvilinear Model
 
 ```{r hypothesis-3a-qm, message=F, warning=F}
+#| lst-label: h3a-qm
+#| lst-cap: H3 Game Behavior Quadratic Model
 # --------------- #
 # QUADRATIC MODEL #
 # --------------- #
@@ -833,11 +1054,6 @@ qm_h3a <- lm(
 parameters::model_parameters(
   emmeans::emtrends(qm_h3a, ~1, var = "dg_a_chosen_transfer", max.degree = 2))
 
-# -------------------------------------- #
-# UNSTANDARDIZED REGRESSION COEFFICIENTS #
-# -------------------------------------- #
-parameters::model_parameters(qm_h3a)
-
 # ------------------------------------ #
 # STANDARDIZED REGRESSION COEFFICIENTS #
 # ------------------------------------ #
@@ -847,22 +1063,73 @@ effectsize::effectsize(qm_h3a)
 #### Data Visualization
 
 ```{r hypothesis-3a-visualize, message=F, warning=F}
+#| lst-label: h3-data-vis
+#| lst-cap: H3 Game Behavior Data Visualization
+
+# Axis Labels
+h3a_vis_x_title <- paste0(
+  "Dictator Game Send ($) (A ", IconWrapper("\uf178"), " B)")
+h3a_vis_y_title <- paste0(
+  "Trust Game Send ($) (C ", IconWrapper("\uf178"), " A)")
+
 set.seed(42)
-qm_h3a_vis <- df_h3a |> 
-  ggplot2::ggplot(ggplot2::aes(x = dg_a_chosen_transfer, y = tg_c_transfer)) +
-  theme_nl() +
-  ggplot2::geom_jitter(
-    width = .01, height = .01, stroke = 0, alpha = .3, size = 0.5, 
-    fill = "gray13", color = "gray33") +
+qm_h3a_vis <- emmeans::emmeans(
+  qm_h3a,
+  specs    = ~dg_a_chosen_transfer,
+  cov.keep = "dg_a_chosen_transfer",
+  at       = list(dg_a_chosen_transfer = seq(0, 0.50, by = 0.01)),
+  by       = "dg_a_chosen_transfer") |>
+  as.data.frame() |>
+  janitor::clean_names('snake') |> 
+  ggplot2::ggplot(
+    ggplot2::aes(
+      x = dg_a_chosen_transfer,
+      y = emmean)) +
+  ggplot2::geom_point(
+    ggplot2::aes(
+      x = dg_a_chosen_transfer_jittered,
+      y = tg_c_transfer_jittered),
+    data = dplyr::mutate(
+      df_h3a,
+      dg_a_chosen_transfer_jittered = pmax(
+        0.01, 
+        pmin(0.5 - 0.01, 
+             dg_a_chosen_transfer + runif(n(), -0.025, 0.025))),
+      tg_c_transfer_jittered = pmax(
+        0.01, 
+        pmin(0.5 - 0.01,
+             tg_c_transfer + runif(n(), -0.025, 0.025)))),
+    color = "#4f46e5", fill = "#4f46e5",
+    stroke = 0, alpha = 0.5, size = 1) +
+  
+  # Model Prediction Line and Confidence Interval
   ggplot2::geom_smooth(
     method = lm, formula = y ~ x + I(x^2), alpha = 0.2, linewidth = 0.5,
-    fill = "gray13", color = "gray33") +
+    fill = "#4f46e5", color = "#4f46e5") +
+  ggplot2::geom_ribbon(
+    ggplot2::aes(ymin = lower_cl, ymax = upper_cl), 
+    alpha = 0.2, linewidth = 0) +
+  
+  # Axis Labels
   ggplot2::labs(
-    x = "**TG Partner's DG Send ($): A\\* ⇒ B**",
-    y = "**TG Send ($): C ⇒ A\\***") +
-  ggplot2::scale_y_continuous(labels = scales::label_number(accuracy = 0.01)) +
-  ggplot2::scale_x_continuous(labels = scales::label_number(accuracy = 0.01)) +
-  tune::coord_obs_pred()
+    x = h3a_vis_x_title,
+    y = h3a_vis_y_title) +
+  
+  # Custom Theme
+  theme_aps() +
+  ggplot2::theme(plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm")) +
+  
+  # Axis Limits
+  ggplot2::scale_y_continuous(
+    expand = c(0, 0),
+    labels = c("0", "0.10", "0.20", "0.30", "0.40", "0.50")) +
+  ggplot2::scale_x_continuous(
+    expand = c(0, 0),
+    labels = c("0", "0.10", "0.20", "0.30", "0.40", "0.50")) +
+  ggplot2::coord_cartesian(
+    xlim = c(0, 0.5), 
+    ylim = c(0, 0.5), 
+    clip = "off")
 
 # Display Figure
 qm_h3a_vis
@@ -871,8 +1138,8 @@ qm_h3a_vis
 ggplot2::ggsave(
   filename = here::here("main/figures/hypothesis-3a-data-vis.png"),
   plot     = qm_h3a_vis, 
-  width    = 2, 
-  height   = 2, 
+  width    = 4, 
+  height   = 3.8, 
   dpi      = 300)
 
 # Delete Figure Object
@@ -880,6 +1147,8 @@ rm(qm_h3a_vis)
 ```
 
 ### Modeling Morality Ratings
+
+#### Prep Data
 
 ```{r hypothesis-3b-prep-data, message=F, warning=F}
 # --------- #
@@ -895,7 +1164,7 @@ df_h3b <- df_complete |>
     dg_a_transfer, dg_a1_transfer, dg_a2_transfer, 
     dg_a_moral, dg_a1_moral, dg_a2_moral) |> 
   
-  ## Pivot morality ratings 
+  ## Pivot morality ratings
   ### dg_a_moral | dg_a1_moral | ... | swing into one column
   tidyr::pivot_longer(
     !c(participant_id, unique_group_id, participant_role, 
@@ -926,7 +1195,7 @@ df_h3b <- df_complete |>
     morality_target = stringr::str_sub(stringr::str_to_upper(
       stringr::str_remove(morality_target, "moral")), end = -2)) |> 
   
-  ## Distinguish game (DG vs. TG)---even though it's just DG
+  ## Distinguish game (DG vs. TG)—even though it's just DG
   tidyr::separate_wider_delim(
     morality_target, delim = "_", 
     names = c("morality_target_game", "morality_target")) |> 
@@ -944,6 +1213,8 @@ df_h3b <- df_complete |>
 #### Linear Model
 
 ```{r hypothesis-3b-lm, message=F, warning=F}
+#| lst-label: h3b-lm
+#| lst-cap: H3 Morality Rating Linear Model
 # ------------ #
 # LINEAR MODEL #
 # ------------ #
@@ -957,14 +1228,14 @@ lm_h3b <- lm(
 # -------------- #
 anova_lm_h3b <- car::Anova(lm_h3b, type = 3)
 parameters::model_parameters(anova_lm_h3b)
-effectsize::effectsize(anova_lm_h3b)
+effectsize::effectsize(anova_lm_h3b) |> as.data.frame()
 
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
 table(dplyr::filter(df_h3b, self_other == "other")$participant_role)
 lm_h3b_role_emm <- emmeans::emmeans(lm_h3b, specs = ~participant_role)
-parameters::model_parameters(lm_h3b_role_emm)
+lm_h3b_role_emm |> as.data.frame()
 
 # -------------------- #
 # PAIRWISE COMPARISONS #
@@ -991,6 +1262,8 @@ parameters::model_parameters(
 #### Curvilinear Model
 
 ```{r hypothesis-3b-qm, message=F, warning=F}
+#| lst-label: h3b-qm
+#| lst-cap: H3 Morality Rating Quadratic Model
 # --------------- #
 # QUADRATIC MODEL #
 # --------------- #
@@ -1004,7 +1277,7 @@ qm_h3b <- lm(
 # -------------- #
 anova_qm_h3b <- car::Anova(qm_h3b, type = 3)
 parameters::model_parameters(anova_qm_h3b)
-effectsize::effectsize(anova_qm_h3b)
+effectsize::effectsize(anova_qm_h3b) |> as.data.frame()
 
 # ---------------------- #
 # AVERAGE MARGINAL TREND #
@@ -1015,9 +1288,9 @@ parameters::model_parameters(
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(dplyr::filter(df_h3b, self_other == "other")$participant_role)
+table(dplyr::filter(df_h3b, self_other == "other")$participant_role)
 qm_h3b_role_emm <- emmeans::emmeans(qm_h3b, specs = ~participant_role) 
-parameters::model_parameters(qm_h3b_role_emm)
+qm_h3b_role_emm |> as.data.frame()
 
 # -------------------- #
 # PAIRWISE COMPARISONS #
@@ -1044,40 +1317,77 @@ parameters::model_parameters(
 #### Data Visualization
 
 ```{r hypothesis-3b-visualize, message=F, warning=F}
+#| lst-label: h3b-data-vis
+#| lst-cap: H3 Morality Rating Data Visualization
+
+# Axis Labels
+h3b_vis_x_title <- paste0(
+  "Dictator Game Send ($) (A ", IconWrapper("\uf178"), " B)")
+
+h3b_vis_y_title <- paste0(
+  "Dictator Game Actor Morality (Rating) (A ", IconWrapper("\uf178"), " B)")
+
 set.seed(42)
 qm_h3b_vis <- emmeans::emmeans(
   qm_h3b,
   specs    = ~participant_role,
   cov.keep = "transfer",
   at       = list(transfer = seq(0, 0.50, by = 0.01)),
-  by       = "transfer") |> 
+  by       = "transfer") |>
   as.data.frame() |>
-  janitor::clean_names('snake') |> 
+  janitor::clean_names('snake') |>
   ggplot2::ggplot(
     ggplot2::aes(
-      x     = transfer, 
+      x     = transfer,
       y     = emmean,
       shape = participant_role,
       fill  = participant_role,
       color = participant_role)) +
-  theme_nl() +
-  ggplot2::geom_jitter(
-    ggplot2::aes(y = morality_rating),
-    data = dplyr::filter(df_h3b, self_other == "other"),
-    width = .01, height = .01, stroke = 0, alpha = .3, size = 0.5) +
+  
+  ggplot2::geom_point(
+    ggplot2::aes(
+      x = transfer_jittered,
+      y = morality_rating_jittered),
+    data = df_h3b |> 
+      dplyr::filter(self_other == "other") |> 
+      dplyr::mutate(
+        transfer_jittered = pmax(
+          0.01, 
+          pmin(0.50 - 0.01, 
+               transfer + runif(n(), -0.075, 0.075))),
+        morality_rating_jittered = pmax(
+          2, 
+          pmin(100 - 2,
+               morality_rating + runif(n(), -5, 5)))),
+    stroke = 0, alpha = 0.5, size = 0.5) +
+  
+  theme_aps() +
   ggplot2::geom_line(alpha = 1, linewidth = .5) +
   ggplot2::geom_ribbon(
-    ggplot2::aes(ymin = lower_cl, ymax = upper_cl), alpha = .4, linewidth = 0) +
+    ggplot2::aes(ymin = lower_cl, ymax = upper_cl),
+    alpha = .4, linewidth = 0) +
   ggplot2::labs(
-    x     = "**Actors' DG Send ($): A\\* ⇒ B**",
-    y     = "**Actors' Perceived Morality: B vs. C ⇒ A\\***",
-    shape = "**Participant Role**",
-    fill  = "**Participant Role**",
-    color = "**Participant Role**") +
+    x     = h3b_vis_x_title,
+    y     = h3b_vis_y_title,
+    shape = "Observer Role",
+    fill  = "Observer Role",
+    color = "Observer Role") +
   ggplot2::scale_fill_manual(values = c("#56A319", "#F063A7")) +
   ggplot2::scale_color_manual(values = c("#56A319", "#F063A7")) +
   ggplot2::scale_shape_manual(values = c("square", "circle")) +
-  ggplot2::scale_x_continuous(labels = scales::label_number(accuracy = 0.01))
+  ggplot2::scale_y_continuous(
+    expand = c(0, 0),
+    limits = c(0, 100), 
+    breaks = seq(0, 100, by = 25), 
+    minor_breaks = NULL) +
+  ggplot2::scale_x_continuous(
+    expand = c(0, 0),
+    labels = c("0", "0.10", "0.20", "0.30", "0.40", "0.50")) +
+  ggplot2::coord_cartesian(xlim = c(0, 0.50), ylim = c(0, 100), clip = "off") +
+  ggplot2::theme(
+    axis.title.x = element_markdown(),
+    axis.title.y = element_markdown(),
+    plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"))
 
 # Display Figure
 qm_h3b_vis
@@ -1086,12 +1396,12 @@ qm_h3b_vis
 ggplot2::ggsave(
   filename = here::here("main/figures/hypothesis-3b-data-vis.png"),
   plot     = qm_h3b_vis, 
-  width    = 3, 
-  height   = 2.5, 
+  width    = 3.8, 
+  height   = 4, 
   dpi      = 300)
 
-# Delete Figure Object
-rm(h3b_vis)
+# Delete Figure Object and Axis Titles
+# rm(h3b_vis, h3b_vis_x_title, h3b_vis_y_title)
 ```
 
 ------------------------------------------------------------------------
@@ -1100,7 +1410,11 @@ rm(h3b_vis)
 
 ### Modeling Game Behavior
 
+#### Prep Data
+
 ```{r hypothesis-4a-prep-data, message=F, warning=F}
+#| lst-label: h4-prep-data
+#| lst-cap: H4 Game Behavior Data Preparation
 # --------- #
 # PREP DATA #
 # --------- #
@@ -1128,11 +1442,15 @@ df_h4a <- df_complete |>
 #### Linear Model
 
 ```{r hypothesis-4a-lm, message=F, warning=F}
+#| lst-label: h4-lm
+#| lst-cap: H4 Game Behavior Linear Model
 # ------------ #
 # LINEAR MODEL #
 # ------------ #
 lm_h4a <- lm(
-  formula   = tg_c_transfer ~ public_private + partner_choice + dg_a_chosen_transfer,
+  formula   = tg_c_transfer ~ public_private 
+  + partner_choice 
+  + dg_a_chosen_transfer,
   data      = df_h4a,
   contrasts = list(
     public_private = "contr.sum", 
@@ -1143,18 +1461,24 @@ lm_h4a <- lm(
 # -------------- #
 anova_lm_h4a <- car::Anova(lm_h4a, type = 3)
 parameters::model_parameters(anova_lm_h4a)
-effectsize::effectsize(anova_lm_h4a)
+effectsize::effectsize(anova_lm_h4a) |> as.data.frame()
 
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
 # table(df_h4a$public_private)
 lm_h4a_obs_emm <- emmeans::emmeans(lm_h4a, specs = ~public_private)
-parameters::model_parameters(lm_h4a_obs_emm)
+lm_h4a_obs_emm |> as.data.frame()
 
 # table(df_h4a$partner_choice)
 lm_h4a_pc_emm  <- emmeans::emmeans(lm_h4a, specs = ~partner_choice)
-parameters::model_parameters(lm_h4a_pc_emm)
+lm_h4a_pc_emm |> as.data.frame()
+
+# ---------------------- #
+# AVERAGE MARGINAL TREND #
+# ---------------------- #
+parameters::model_parameters(
+  emmeans::emtrends(lm_h4a, ~1, var = "dg_a_chosen_transfer"))
 
 # -------------------- #
 # PAIRWISE COMPARISONS #
@@ -1187,19 +1511,25 @@ parameters::model_parameters(
 
 # Partner Choice: Yes - No (Cohen's d)
 parameters::model_parameters(
-  emmeans::eff_size(lm_h4a_pc_emm, 
-                    sigma = sigma(lm_h4a), 
-                    edf   = df.residual(lm_h4a)))
+  emmeans::eff_size(
+    lm_h4a_pc_emm, 
+    sigma = sigma(lm_h4a), 
+    edf   = df.residual(lm_h4a)))
 ```
 
 #### Curvilinear Model
 
 ```{r hypothesis-4a-qm, message=F, warning=F}
+#| lst-label: h4-qm
+#| lst-cap: H4 Game Behavior Quadratic Model
 # --------------- #
 # QUADRATIC MODEL #
 # --------------- #
-qm_h4a <- lm(  # subsetting on "other"
-  formula   = tg_c_transfer ~ public_private + partner_choice + dg_a_chosen_transfer + I(dg_a_chosen_transfer^2), 
+qm_h4a <- lm(
+  formula   = tg_c_transfer ~ public_private
+  + partner_choice 
+  + dg_a_chosen_transfer 
+  + I(dg_a_chosen_transfer^2), 
   data      = df_h4a,
   contrasts = list(
     public_private = "contr.sum", 
@@ -1216,7 +1546,7 @@ parameters::model_parameters(
 # -------------- #
 anova_qm_h4a <- car::Anova(qm_h4a, type = 3)
 parameters::model_parameters(anova_qm_h4a)
-effectsize::effectsize(anova_qm_h4a)
+effectsize::effectsize(anova_qm_h4a) |> as.data.frame()
 
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
@@ -1224,11 +1554,11 @@ effectsize::effectsize(anova_qm_h4a)
 # table(df_h4a$public_private)
 # Observability: Public - Private
 qm_h4a_obs_emm <- emmeans::emmeans(qm_h4a, specs = ~public_private) 
-parameters::model_parameters(qm_h4a_obs_emm)
+qm_h4a_obs_emm |> as.data.frame()
 
 # Partner Choice: Yes - No
 qm_h4a_pc_emm  <- emmeans::emmeans(qm_h4a, specs = ~partner_choice)
-parameters::model_parameters(qm_h4a_pc_emm)
+qm_h4a_pc_emm |> as.data.frame()
 
 # -------------------- #
 # PAIRWISE COMPARISONS #
@@ -1270,15 +1600,23 @@ parameters::model_parameters(
 #### Data Visualization
 
 ```{r hypothesis-4a-visualize, message=F, warning=F}
+#| lst-label: h4a-data-vis
+#| lst-cap: H4 Game Behavior Data Visualization
+h4a_vis_x_title <- paste0(
+  "Dictator Game Send ($) (A ", IconWrapper("\uf178"), " B)")
+
+h4a_vis_y_title <- paste0(
+  "Trust Game Send ($) (C ", IconWrapper("\uf178"), " A)")
+
 set.seed(42)
 qm_h4a_vis <- emmeans::emmeans(
-  qm_h4a, 
-  specs    = ~public_private:partner_choice, 
+  qm_h4a,
+  specs    = ~public_private:partner_choice,
   cov.keep = "dg_a_chosen_transfer",
   at       = list(dg_a_chosen_transfer = seq(0, 0.50, by = 0.01)),
-  by       = "dg_a_chosen_transfer") |> 
-  as.data.frame() |> 
-  janitor::clean_names('snake') |> 
+  by       = "dg_a_chosen_transfer") |>
+  as.data.frame() |>
+  janitor::clean_names('snake') |>
   dplyr::mutate(
     public_private = dplyr::case_when(
       public_private == "public"  ~ "Public",
@@ -1293,36 +1631,54 @@ qm_h4a_vis <- emmeans::emmeans(
       linetype = public_private,
       fill     = partner_choice,
       color    = partner_choice)) +
-  ggplot2::geom_jitter(
-    data = df_h4a |>
+  
+  ggplot2::geom_point(
+    ggplot2::aes(
+      x = dg_a_chosen_transfer_jittered,
+      y = tg_c_transfer_jittered),
+    data = df_h4a |> 
       dplyr::mutate(
+        dg_a_chosen_transfer_jittered = pmax(
+          0.01, 
+          pmin(0.50 - 0.01, 
+               dg_a_chosen_transfer + runif(n(), -0.025, 0.025))),
+        tg_c_transfer_jittered = pmax(
+          0.01, 
+          pmin(0.50 - 0.01,
+               tg_c_transfer + runif(n(), -0.025, 0.025))),
         public_private = dplyr::case_when(
           public_private == "public"  ~ "Public",
           public_private == "private" ~ "Private"),
         partner_choice = dplyr::case_when(
           partner_choice == "no"  ~ "No",
           partner_choice == "yes" ~ "Yes")),
-    ggplot2::aes(y = tg_c_transfer),
-    width = .01, height = .01, stroke = 0, alpha = 0.3, size = 0.5) +
+    stroke = 0, alpha = 0.5, size = 1) +
   ggplot2::geom_line(alpha = 1, size = .5) +
   ggplot2::geom_ribbon(
-    ggplot2::aes(ymin = lower_cl, ymax = upper_cl), alpha = .4, linewidth = 0) +
+    ggplot2::aes(ymin = lower_cl, ymax = upper_cl), alpha = 0.2, linewidth = 0) +
   ggplot2::labs(
-    x     = "**TG Partner's DG Send ($): A\\* ⇒ B**",
-    y     = "**TG Send ($): C ⇒ A\\***",
-    fill  = "**Partner Choice**",
-    color = "**Partner Choice**") +
+    x     = h4a_vis_x_title,
+    y     = h4a_vis_y_title,
+    fill  = "Partner Choice",
+    color = "Partner Choice") +
   ggplot2::facet_wrap(~public_private) +
-  ggplot2::scale_y_continuous(labels = scales::label_number(accuracy = 0.01)) +
-  ggplot2::scale_x_continuous(labels = scales::label_number(accuracy = 0.01)) +
+  ggplot2::scale_y_continuous(
+    expand = c(0, 0),
+    labels = c("0", "0.10", "0.20", "0.30", "0.40", "0.50")) +
+  ggplot2::scale_x_continuous(
+    expand = c(0, 0),
+    labels = c("0", "0.10", "0.20", "0.30", "0.40", "0.50")) +
   ggplot2::scale_linetype_manual(
-    values = c("Public" = "solid", "Private" = "1111")) +
+    values = c("Public" = "solid", "Private" = "2222")) +
   ggplot2::scale_color_manual(values = c("#D55E00", "#0072B2")) +
   ggplot2::scale_fill_manual(values = c("#D55E00", "#0072B2")) +
   ggplot2::scale_shape_manual(values = c("square", "circle")) +
-  theme_nl() +
-  ggplot2::guides(linetype = "none") +
-  tune::coord_obs_pred()
+  ggplot2::coord_cartesian(xlim = c(0, 0.5), ylim = c(0, 0.5), clip = "off") +
+  theme_aps() +
+  ggplot2::theme(
+    panel.spacing = unit(0.75, "cm"),
+    plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm")) +
+  ggplot2::guides(linetype = "none")
 
 # Display Figure
 qm_h4a_vis
@@ -1331,15 +1687,17 @@ qm_h4a_vis
 ggplot2::ggsave(
   filename = here::here("main/figures/hypothesis-4a-data-vis.png"), 
   plot     = qm_h4a_vis, 
-  width    = 4, 
-  height   = 2.8, 
+  width    = 6, 
+  height   = 4, 
   dpi      = 300)
 
-# Delete Figure Object
-rm(qm_h4a_vis)
+# Delete Figure Object and Axis Titles
+# rm(qm_h4a_vis, h4a_vis_x_title, h4a_vis_y_title)
 ```
 
 ### Modeling Morality Ratings
+
+#### Prep Data
 
 ```{r hypothesis-4b-prep-data, message=F, warning=F}
 # --------- #
@@ -1351,14 +1709,16 @@ df_h4b <- df_h3b
 #### Linear Model
 
 ```{r hypothesis-4b-lm, message=F, warning=F}
+#| lst-label: h4b-lm
+#| lst-cap: H4 Morality Rating Linear Model
 # ------------ #
 # LINEAR MODEL #
 # ------------ #
 lm_h4b <- lm(  # subsetting on "other"
-  formula   = morality_rating ~ public_private * partner_choice + transfer, 
+  formula   = morality_rating ~ (public_private * partner_choice) + transfer, 
   data      = dplyr::filter(df_h4b, self_other == "other"), 
   contrasts = list(
-    partner_choice = "contr.sum", 
+    partner_choice = "contr.sum",
     public_private = "contr.sum"))
 
 # -------------- #
@@ -1366,18 +1726,18 @@ lm_h4b <- lm(  # subsetting on "other"
 # -------------- #
 anova_h4b <- car::Anova(lm_h4b, type = 3)
 parameters::model_parameters(anova_h4b)
-effectsize::effectsize(anova_h4b)
+effectsize::effectsize(anova_h4b) |> as.data.frame()
 
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(dplyr::filter(df_h4b, self_other == "other")$public_private)
+table(dplyr::filter(df_h4b, self_other == "other")$public_private)
 lm_h4b_obs_emm <- emmeans::emmeans(lm_h4b, specs = ~public_private) 
-parameters::model_parameters(lm_h4b_obs_emm)
+lm_h4b_obs_emm |> as.data.frame()
 
-# table(dplyr::filter(df_h4b, self_other == "other")$partner_choice)
+table(dplyr::filter(df_h4b, self_other == "other")$partner_choice)
 lm_h4b_pc_emm  <- emmeans::emmeans(lm_h4b, specs = ~partner_choice) 
-parameters::model_parameters(lm_h4b_pc_emm)
+lm_h4b_pc_emm |> as.data.frame()
 
 # -------------------- #
 # PAIRWISE COMPARISONS #
@@ -1394,7 +1754,7 @@ parameters::model_parameters(
 parameters::model_parameters(
   emmeans::contrast(
     object = lm_h4b_pc_emm, 
-    method = "pairwise", object = 
+    method = "pairwise",
     infer  = T, 
     adjust = "none"))
 
@@ -1419,11 +1779,14 @@ parameters::model_parameters(
 #### Curvilinear Model
 
 ```{r hypothesis-4b-qm, message=F, warning=F}
+#| lst-label: h4b-qm
+#| lst-cap: H4 Morality Rating Quadratic Model
 # --------------- #
 # QUADRATIC MODEL #
 # --------------- #
 qm_h4b <- lm(  # subsetting on "other"
-  formula   = morality_rating ~ public_private * partner_choice + transfer + I(transfer^2), 
+  formula   = morality_rating ~ (public_private * partner_choice) + 
+    transfer + I(transfer^2), 
   data      = dplyr::filter(df_h4b, self_other == "other"),
   contrasts = list(
     partner_choice = "contr.sum", 
@@ -1434,7 +1797,13 @@ qm_h4b <- lm(  # subsetting on "other"
 # -------------- #
 anova_qm_h4b <- car::Anova(qm_h4b, type = 3)
 parameters::model_parameters(anova_qm_h4b)
-effectsize::effectsize(anova_qm_h4b)
+effectsize::effectsize(anova_qm_h4b) |> as.data.frame()
+
+# ---------------------- #
+# AVERAGE MARGINAL TREND #
+# ---------------------- #
+parameters::model_parameters(
+  emmeans::emtrends(qm_h4b, ~1, var = "transfer", max.degree = 2))
 
 # ---------------------- #
 # INTERACTION DECOMPOSED #
@@ -1457,15 +1826,25 @@ car::Anova(lm_h4b_intcov_other_public, type = 3)
 #### Data Visualization
 
 ```{r hypothesis-4b-visualize, message=F, warning=F}
+#| lst-label: h4b-data-vis
+#| lst-cap: H4 Morality Rating Data Visualization
+
+# Axis Labels
+h4b_vis_x_title <- paste0(
+  "Dictator Game Send ($) (A ", IconWrapper("\uf178"), " B)")
+
+h4b_vis_y_title <- paste0(
+  "Dictator Game Actor Morality (Rating) (A ", IconWrapper("\uf178"), " B)")
+
 set.seed(42)
 h4b_vis <- emmeans::emmeans(
-  qm_h4b, 
-  specs    = ~public_private:partner_choice, 
+  qm_h4b,
+  specs    = ~public_private:partner_choice,
   cov.keep = "transfer",
   at       = list(transfer = seq(0, 0.50, by = 0.01)),
-  by       = "transfer") |> 
-  as.data.frame() |> 
-  janitor::clean_names('snake') |> 
+  by       = "transfer") |>
+  as.data.frame() |>
+  janitor::clean_names('snake') |>
   dplyr::mutate(
     public_private = dplyr::case_when(
       public_private == "public"  ~ "Public",
@@ -1480,36 +1859,58 @@ h4b_vis <- emmeans::emmeans(
       linetype = public_private,
       fill     = partner_choice,
       color    = partner_choice)) +
-  ggplot2::geom_jitter(
-    data = df_h4b |>
+  
+  ggplot2::geom_point(
+    ggplot2::aes(
+      x = transfer_jittered,
+      y = morality_rating_jittered),
+    data = df_h4b |> 
+      # dplyr::filter(self_other == "other") |> 
       dplyr::mutate(
+        transfer_jittered = pmax(
+          0.01, 
+          pmin(0.50 - 0.01, 
+               transfer + runif(n(), -0.025, 0.025))),
+        morality_rating_jittered = pmax(
+          2, 
+          pmin(100 - 2,
+               morality_rating + runif(n(), -5, 5))),
         public_private = dplyr::case_when(
           public_private == "public"  ~ "Public",
           public_private == "private" ~ "Private"),
         partner_choice = dplyr::case_when(
           partner_choice == "no"  ~ "No",
           partner_choice == "yes" ~ "Yes")),
-    ggplot2::aes(y = morality_rating),
-    width = .01, height = .01, stroke = 0, alpha = 0.3, size = 0.5) +
+    stroke = 0, alpha = 0.5, size = 0.5) +
   ggplot2::geom_line(alpha = 1, size = .5) +
   ggplot2::geom_ribbon(
-    ggplot2::aes(ymin = lower_cl, ymax = upper_cl), alpha = .4, size = 0) +
+    ggplot2::aes(ymin = lower_cl, ymax = upper_cl), alpha = .3, size = 0) +
   ggplot2::labs(
-    x     = "**TG Partner's DG Send ($): A\\* ⇒ B**",
-    y     = "**Actors' Perceived Morality (A\\*)**",
-    shape = "**Partner Choice**",
-    fill  = "**Partner Choice**",
-    color = "**Partner Choice**") +
+    x     = h4b_vis_x_title,
+    y     = h4b_vis_y_title,
+    shape = "Partner Choice",
+    fill  = "Partner Choice",
+    color = "Partner Choice") +
   ggplot2::facet_wrap(~public_private) +
-  ggplot2::scale_y_continuous(labels = scales::label_number(accuracy = 0.01)) +
   ggplot2::scale_x_continuous(labels = scales::label_number(accuracy = 0.01)) +
   ggplot2::scale_linetype_manual(
-    values = c("Public" = "solid", "Private" = "1111")) +
+    values = c("Public" = "solid", "Private" = "2222")) +
   ggplot2::scale_color_manual(values = c("#D55E00", "#0072B2")) +
   ggplot2::scale_fill_manual(values = c("#D55E00", "#0072B2")) +
   ggplot2::scale_shape_manual(values = c("square", "circle")) +
-  theme_nl() +
-  ggplot2::guides(linetype = "none")
+  theme_aps() +
+  ggplot2::theme(
+    panel.spacing = unit(0.75, "cm"),
+    plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm")) +
+  ggplot2::guides(linetype = "none") +
+  ggplot2::scale_y_continuous(
+    expand = c(0, 0),
+    limits = c(0, 100), 
+    breaks = seq(0, 100, by = 25), minor_breaks = NULL) +
+  ggplot2::scale_x_continuous(
+    expand = c(0, 0),
+    labels = c("0", "0.10", "0.20", "0.30", "0.40", "0.50")) +
+  ggplot2::coord_cartesian(xlim = c(0, 0.50), ylim = c(0, 100), clip = "off")
 
 # Display Figure
 h4b_vis
@@ -1518,16 +1919,21 @@ h4b_vis
 ggplot2::ggsave(
   filename = here::here("main/figures/hypothesis-4b-data-vis.png"),
   plot     = h4b_vis,
-  width    = 4,
-  height   = 2.5,
+  width    = 6,
+  height   = 4,
   dpi      = 300)
 
-rm(h4b_vis)
+# Delete Figure Object and Axis Titles
+# rm(h4b_vis, h4b_vis_x_title, h4b_vis_y_title)
 ```
 
 ------------------------------------------------------------------------
 
 ## X5: Exploratory Self/Other Analyses
+
+### Modeling Morality Ratings
+
+#### Prep Data
 
 ```{r exploratory-5-prep-data, message=F, warning=F}
 # --------- #
@@ -1538,9 +1944,11 @@ df_x5 <- df_h4b |>
     transfer_meancentered = scale(transfer, scale = F), .after = transfer)
 ```
 
-### Linear Model
+#### Linear Model
 
 ```{r exploratory-5-lm, message=F, warning=F}
+#| lst-label: x5-lm
+#| lst-cap: X5 Morality Rating Linear Model
 # ------------ #
 # LINEAR MODEL #
 # ------------ #
@@ -1554,7 +1962,7 @@ lm_x5 <- lm(
 # -------------- #
 anova_lm_x5 <- car::Anova(lm_x5, type = 3)
 parameters::model_parameters(anova_lm_x5)
-effectsize::effectsize(anova_lm_x5)
+effectsize::effectsize(anova_lm_x5) |> as.data.frame()
 
 # ---------------------- #
 # AVERAGE MARGINAL TREND #
@@ -1562,12 +1970,16 @@ effectsize::effectsize(anova_lm_x5)
 parameters::model_parameters(
   emmeans::emtrends(lm_x5, ~1, var = "transfer_meancentered"))
 
+lm_x5_so_emt <- emmeans::emtrends(
+  lm_x5, ~self_other, var = "transfer_meancentered")
+lm_x5_so_emt |> as.data.frame()
+
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(df_x5$self_other)
+table(df_x5$self_other)
 lm_x5_so_emm <- emmeans::emmeans(lm_x5, specs = ~self_other)
-parameters::model_parameters(lm_x5_so_emm)
+lm_x5_so_emm |> as.data.frame()
 
 # -------------------- #
 # PAIRWISE COMPARISONS #
@@ -1576,6 +1988,13 @@ parameters::model_parameters(lm_x5_so_emm)
 parameters::model_parameters(
   emmeans::contrast(
     object = lm_x5_so_emm, 
+    method = "pairwise", 
+    infer  = T, 
+    adjust = "none"))
+
+parameters::model_parameters(
+  emmeans::contrast(
+    object = lm_x5_so_emt, 
     method = "pairwise", 
     infer  = T, 
     adjust = "none"))
@@ -1604,14 +2023,17 @@ lm_x5_other <- lm(
 parameters::model_parameters(lm_x5_other)
 ```
 
-### Curvilinear Model
+#### Curvilinear Model
 
 ```{r exploratory-5-qm, message=F, warning=F} 
+#| lst-label: x5-qm
+#| lst-cap: X5 Morality Rating Quadratic Model
 # --------------- #
 # QUADRATIC MODEL #
 # --------------- #
 qm_x5 <- lm(
-  formula   = morality_rating ~ self_other * (transfer_meancentered + I(transfer_meancentered^2)), 
+  formula   = morality_rating ~ self_other * 
+    (transfer_meancentered + I(transfer_meancentered^2)), 
   data      = df_x5,
   contrasts = list(self_other = "contr.sum"))
 
@@ -1620,30 +2042,83 @@ qm_x5 <- lm(
 # -------------- #
 anova_qm_x5 <- car::Anova(qm_x5, type = 3)
 parameters::model_parameters(anova_qm_x5)
-effectsize::effectsize(anova_qm_x5)
+effectsize::effectsize(anova_qm_x5) |> as.data.frame()
+
+# ---------------------- #
+# AVERAGE MARGINAL TREND #
+# ---------------------- #
+parameters::model_parameters(
+  emmeans::emtrends(qm_x5, ~1, var = "transfer_meancentered", max.degree = 2))
+
+qm_x5_so_emt <- emmeans::emtrends(
+  qm_x5, ~self_other, var = "transfer_meancentered")
+parameters::model_parameters(qm_x5_so_emt)
+
+# ------------------------ #
+# ESTIMATED MARGINAL MEANS #
+# ------------------------ #
+# table(df_x5$self_other)
+qm_x5_so_emm <- emmeans::emmeans(qm_x5, specs = ~self_other)
+parameters::model_parameters(qm_x5_so_emm)
+
+# -------------------- #
+# PAIRWISE COMPARISONS #
+# -------------------- #
+# Perspective: Self - Other
+parameters::model_parameters(
+  emmeans::contrast(
+    object = qm_x5_so_emm, 
+    method = "pairwise", 
+    infer  = T, 
+    adjust = "none"))
+
+parameters::model_parameters(
+  emmeans::contrast(
+    object = qm_x5_so_emt, 
+    method = "pairwise", 
+    infer  = T, 
+    adjust = "none"))
+
+# --------------------------------- #
+# EFFECT SIZES FOR MEAN COMPARISONS #
+# --------------------------------- #
+# Perspective: Self - Other (Cohen's d)
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = qm_x5_so_emm, 
+    sigma  = sigma(qm_x5), 
+    edf    = df.residual(qm_x5)))
 ```
 
-### Data Visualization
+#### Data Visualization
 
 ```{r exploratory-data-vis, message=F, warning=F}
+#| lst-label: x5-data-vis
+#| lst-cap: X5 Morality Rating Data Visualization
 # ---------------------------- #
 # QUADRATIC MODEL FOR PLOTTING #
 # ---------------------------- #
 # We do not care about mean centering for visualization purposes
-qm_x5 <- lm(
+qm_x5_vis <- lm(
   formula   = morality_rating ~ self_other * (transfer + I(transfer^2)), 
   data      = df_x5, 
   contrasts = list(self_other = "contr.sum"))
 
+x5_vis_x_title <- paste0(
+  "Dictator Game Send ($) (A ", IconWrapper("\uf178"), " B)")
+
+x5_vis_y_title <- paste0(
+  "Dictator Game Actor Morality (Rating) (A ", IconWrapper("\uf178"), " B)")
+
 set.seed(42)
 x5_vis <- emmeans::emmeans(
-  qm_x5, 
-  specs    = ~self_other, 
+  qm_x5_vis,
+  specs    = ~self_other,
   cov.keep = "transfer",
   at       = list(transfer = seq(0, 0.50, by = 0.01)),
-  by       = "transfer") |> 
-  as.data.frame() |> 
-  janitor::clean_names('snake') |> 
+  by       = "transfer") |>
+  as.data.frame() |>
+  janitor::clean_names('snake') |>
   dplyr::mutate(
     self_other = forcats::fct_relevel(
       dplyr::case_when(
@@ -1652,34 +2127,54 @@ x5_vis <- emmeans::emmeans(
       c("Self", "Other"))) |>
   ggplot2::ggplot(
     ggplot2::aes(
-      x        = transfer,
-      y        = emmean,
-      shape    = self_other,
-      fill     = self_other,
-      color    = self_other)) +
-  ggplot2::geom_jitter(
-    data = df_x5 |>
+      x     = transfer,
+      y     = emmean,
+      shape = self_other,
+      fill  = self_other,
+      color = self_other)) +
+  
+  ggplot2::geom_point(
+    ggplot2::aes(
+      x = transfer_jittered,
+      y = morality_rating_jittered),
+    data = df_x5 |> 
       dplyr::mutate(
+        transfer_jittered = pmax(
+          0.01, 
+          pmin(0.50 - 0.01, 
+               transfer + runif(n(), -0.025, 0.025))),
+        morality_rating_jittered = pmax(
+          2, 
+          pmin(100 - 2,
+               morality_rating + runif(n(), -5, 5))),
         self_other = dplyr::case_when(
           self_other == "self"  ~ "Self",
           self_other == "other" ~ "Other")),
-    ggplot2::aes(y = morality_rating, fill = self_other),
-    width = .01, height = .01, stroke = 0, alpha = 0.3, size = 0.5) +
+    stroke = 0, alpha = 0.5, size = 0.5) +
   ggplot2::geom_line(alpha = 1, linewidth = 0.5) +
   ggplot2::geom_ribbon(
-    ggplot2::aes(ymin = lower_cl, ymax = upper_cl), alpha = .4, linewidth = 0) +
+    ggplot2::aes(ymin = lower_cl, ymax = upper_cl), alpha = .3, linewidth = 0) +
   ggplot2::labs(
-    x     = "**DG Send ($): A\\* ⇒ B**",
-    y     = "**Actors' Perceived Morality: B/C/A\\* ⇒ A\\***",
-    shape = "**Rater Perspective**",
-    fill  = "**Rater Perspective**",
-    color = "**Rater Perspective**") +
+    x     = x5_vis_x_title,
+    y     = x5_vis_y_title,
+    shape = "Rater Perspective",
+    fill  = "Rater Perspective",
+    color = "Rater Perspective") +
   ggplot2::scale_x_continuous(labels = scales::label_number(accuracy = 0.01)) +
   ggplot2::scale_color_manual(values = c("#0072B2", "#D55E00")) +
   ggplot2::scale_fill_manual(values = c("#0072B2", "#D55E00")) +
   ggplot2::scale_shape_manual(values = c("circle", "square")) +
-  theme_nl() +
-  ggplot2::guides(linetype = "none")
+  theme_aps() +
+  ggplot2::theme(
+    plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm")) +
+  ggplot2::guides(linetype = "none") +
+  ggplot2::scale_y_continuous(
+    expand = c(0, 0),
+    limits = c(0, 100), breaks = seq(0, 100, by = 25), minor_breaks = NULL) +
+  ggplot2::scale_x_continuous(
+    expand = c(0, 0),
+    labels = c("0", "0.10", "0.20", "0.30", "0.40", "0.50")) +
+  ggplot2::coord_cartesian(xlim = c(0, 0.50), ylim = c(0, 100), clip = "off")
 
 # Display Figure
 x5_vis
@@ -1688,8 +2183,8 @@ x5_vis
 ggplot2::ggsave(
   filename = here::here("main/figures/exploratory-5-data-vis.png"),
   plot     = x5_vis,
-  width    = 3,
-  height   = 2.5,
+  width    = 3.8,
+  height   = 4,
   dpi      = 300)
 
 # Delete Object
@@ -1707,6 +2202,8 @@ rm(x5_vis)
 Independent-Samples T-Test
 
 ```{r hypothesis-1-prereg-t-test, message=F, warning=F}
+#| lst-label: pre1-ttest
+#| lst-cap: Preregistered H1 Dictator Game Generosity T-Test
 # --------- #
 # PREP DATA #
 # --------- #
@@ -1738,7 +2235,7 @@ lm_pre1 <- lm(
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(df_preh1$public_private)
+table(df_pre1$public_private)
 # Observability: Public - Private
 parameters::model_parameters(
   emmeans::emmeans(lm_pre1, specs = ~public_private))
@@ -1752,6 +2249,8 @@ Comparing initial trustor generosity in the TG by observability controlling for
 generosity in the DG.
 
 ```{r hypothesis-2-prereg-lm, message=F, warning=F}
+#| lst-label: pre2-lm
+#| lst-cap: Preregistered H2 Trust Game Generosity Linear Model
 # --------- #
 # PREP DATA #
 # --------- #
@@ -1760,7 +2259,7 @@ df_pre2 <- df_h4a
 # ------------ #
 # LINEAR MODEL #
 # ------------ #
-lm_pre2 <- lm(
+lm_pre2a <- lm(
   formula   = tg_c_transfer ~ public_private + dg_a_chosen_transfer, 
   data      = df_pre2, 
   contrasts = list(public_private = "contr.sum"))
@@ -1768,15 +2267,26 @@ lm_pre2 <- lm(
 # -------------- #
 # TYPE III ANOVA #
 # -------------- #
-anova_lm_pre2 <- car::Anova(lm_pre2, type = 3)
-parameters::model_parameters(lm_pre2)
-effectsize::effectsize(lm_pre2)
+anova_lm_pre2a <- car::Anova(lm_pre2a, type = 3)
+parameters::model_parameters(lm_pre2a)
+effectsize::effectsize(lm_pre2a)
+
+lm_pre2a_obs_emm <- emmeans::emmeans(lm_pre2a, specs = ~public_private)
+parameters::model_parameters(lm_pre2a_obs_emm)
+
+# Observability: Public - Private
+parameters::model_parameters(
+  emmeans::contrast(
+    object = lm_pre2a_obs_emm, 
+    method = "pairwise", 
+    infer  = T, 
+    adj    = "none"))
 
 # ------------ #
 # LINEAR MODEL #
 # ------------ #
 # As an additional test, do not control for DG generosity
-lm_pre2 <- lm(
+lm_pre2b <- lm(
   formula   = tg_c_transfer ~ public_private, 
   data      = df_pre2, 
   contrasts = list(public_private = "contr.sum"))
@@ -1784,9 +2294,9 @@ lm_pre2 <- lm(
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(df_pre4$public_private)
-lm_pre2_obs_emm <- emmeans::emmeans(lm_pre2, specs = ~public_private)
-parameters::model_parameters(lm_pre2_obs_emm)
+table(df_pre2$public_private)
+lm_pre2b_obs_emm <- emmeans::emmeans(lm_pre2b, specs = ~public_private)
+parameters::model_parameters(lm_pre2b_obs_emm)
 
 # -------------------- #
 # PAIRWISE COMPARISONS #
@@ -1794,10 +2304,20 @@ parameters::model_parameters(lm_pre2_obs_emm)
 # Observability: Public - Private
 parameters::model_parameters(
   emmeans::contrast(
-    object = lm_pre2_obs_emm, 
+    object = lm_pre2b_obs_emm, 
     method = "pairwise", 
     infer  = T, 
     adj    = "none"))
+
+# ------------------------------- #
+# EFFECT SIZE FOR MEAN COMPARISON #
+# ------------------------------- #
+# Observability: Public - Private
+parameters::model_parameters(
+  emmeans::eff_size(
+    object = lm_pre2b_obs_emm, 
+    sigma  = sigma(lm_pre2b), 
+    edf    = df.residual(lm_pre2b)))
 ```
 
 ### Preregistered H3 (Not in Main Text)
@@ -1805,6 +2325,8 @@ parameters::model_parameters(
 Linear Regression
 
 ```{r hypothesis-3-prereg-lm, message=F, warning=F}
+#| lst-label: pre3-lm
+#| lst-cap: Preregistered H3 Dictator Game Transfer Difference Linear Model
 # --------- #
 # PREP DATA #
 # --------- #
@@ -1825,7 +2347,6 @@ lm_pre3 <- lm(
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(df_pre3$tg_partner_choice)
 lm_pre3_tg_pc_emm <- emmeans::emmeans(lm_pre3, specs = ~tg_partner_choice)
 parameters::model_parameters(lm_pre3_tg_pc_emm)
 
@@ -1866,6 +2387,8 @@ The transfer difference is more negative (A2 gave more than A1) when A2 is
 picked -- in other words, A2 is picked when they give more than A1.
 
 ```{r hypothesis-5-prereg-lm, message=F, warning=F}
+#| lst-label: pre5-lm
+#| lst-cap: Preregistered H5 Trust Game Return Ratio Linear Model
 # --------- #
 # PREP DATA #
 # --------- #
@@ -1888,6 +2411,8 @@ parameters::model_parameters(lm_pre5)
 ### 2.1 H1x: Exploratory Interaction Model
 
 ```{r hypothesis-1-interaction-model, message=F, warning=F}
+#| lst-label: h1x-lm
+#| lst-cap: Exploratory H1 Interaction Model
 # ------------ #
 # LINEAR MODEL #
 # ------------ #
@@ -1908,13 +2433,13 @@ effectsize::effectsize(anova_lm_h1X)
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(df_h1$public_private)
 # Observability: Public - Private
+table(df_h1$public_private)
 lm_h1X_obs_emm <- emmeans::emmeans(lm_h1X, specs = ~public_private)
 parameters::model_parameters(lm_h1X_obs_emm)
 
-# table(df_h1$partner_choice)
 # Partner Choice: Yes - No
+table(df_h1$partner_choice)
 lm_h1X_pc_emm  <- emmeans::emmeans(lm_h1X, specs = ~partner_choice)
 parameters::model_parameters(lm_h1X_pc_emm)
 
@@ -1958,11 +2483,14 @@ parameters::model_parameters(
 ### 2.2 H2aX: Exploratory Interaction Model
 
 ```{r hypothesis-2a-interaction-models, message=F, warning=F}
+#| lst-label: h2ax-lm-qm
+#| lst-cap: Exploratory H2a Interaction Models
 # ------------ #
 # LINEAR MODEL #
 # ------------ #
 lm_h2aX <- lm(
-  formula   = tg_a_return_ratio ~ (public_private * partner_choice) + dg_a_chosen_transfer_ratio, 
+  formula   = tg_a_return_ratio ~ (public_private * partner_choice) 
+  + dg_a_chosen_transfer_ratio, 
   data      = df_h2, 
   contrasts = list(
     public_private = "contr.sum", 
@@ -1972,7 +2500,9 @@ lm_h2aX <- lm(
 # QUADRATIC MODEL #
 # --------------- #
 qm_h2aX <- lm(
-  formula   = tg_a_return_ratio ~ (public_private * partner_choice) + dg_a_chosen_transfer_ratio + I(dg_a_chosen_transfer_ratio^2),
+  formula   = tg_a_return_ratio ~ (public_private * partner_choice) 
+  + dg_a_chosen_transfer_ratio 
+  + I(dg_a_chosen_transfer_ratio^2),
   data      = df_h2, 
   contrasts = list(
     public_private = "contr.sum", 
@@ -1983,18 +2513,18 @@ qm_h2aX <- lm(
 # -------------- #
 anova_lm_h2aX <- car::Anova(lm_h2aX, type = 3)
 parameters::model_parameters(anova_lm_h2aX)
-effectsize::effectsize(anova_lm_h2aX)
+effectsize::effectsize(anova_lm_h2aX) |> as.data.frame()
 
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(df_h2$public_private)
 # Observability: Public - Private
+table(df_h2$public_private)
 lm_h2aX_obs_emm <- emmeans::emmeans(lm_h2aX, specs = ~public_private)
 parameters::model_parameters(lm_h2aX_obs_emm)
 
-# table(df_h2$partner_choice)
 # Partner Choice: Yes - No
+table(df_h2$partner_choice)
 lm_h2aX_pc_emm  <- emmeans::emmeans(lm_h2aX, specs = ~partner_choice)
 parameters::model_parameters(lm_h2aX_pc_emm)
 
@@ -2038,12 +2568,19 @@ parameters::model_parameters(
 ### 2.3 H3bX: Exploratory Interaction Model
 
 ```{r hypothesis-3b-interaction-models, message=F, warning=F}
+#| lst-label: h3bx-lm-qm
+#| lst-cap: Exploratory H3b Interaction Models
 # ------------ #
 # LINEAR MODEL #
 # ------------ #
+df_h3bX <- df_h3b |> 
+  dplyr::mutate(
+    transfer_meancentered = scale(transfer, scale = F), .after = transfer) |> 
+  dplyr::filter(self_other == "other")
+
 lm_h3bX <- lm(
-  formula   = morality_rating ~ transfer * participant_role, 
-  data      = dplyr::filter(df_h3b, self_other == "other"),
+  formula   = morality_rating ~ transfer_meancentered * participant_role, 
+  data      = df_h3bX,
   contrasts = list(participant_role = "contr.sum"))
 
 # -------------- #
@@ -2051,12 +2588,12 @@ lm_h3bX <- lm(
 # -------------- #
 anova_h3bX <- car::Anova(lm_h3bX, type = 3)
 parameters::model_parameters(anova_h3bX)
-effectsize::effectsize(anova_h3bX)
+effectsize::effectsize(anova_h3bX) |> as.data.frame()
 
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(df_h3b$participant_role)
+table(df_h3bX$participant_role)
 lm_h3bX_role_emm <- emmeans::emmeans(lm_h3bX, specs = ~participant_role)
 parameters::model_parameters(lm_h3bX_role_emm)
 
@@ -2097,7 +2634,8 @@ effectsize::effectsize(anova_h3bX_curv)
 # ------------------------ #
 # table(df_h3b$participant_role)
 
-lm_h3bX_curv_role_emm <- emmeans::emmeans(lm_h3bX_curv, specs = ~participant_role)
+lm_h3bX_curv_role_emm <- emmeans::emmeans(
+  lm_h3bX_curv, specs = ~participant_role)
 parameters::model_parameters(lm_h3bX_curv_role_emm)
 
 # -------------------- #
@@ -2128,8 +2666,9 @@ parameters::model_parameters(
 # ------------ #
 # LINEAR MODEL #
 # ------------ #
-lm_h4aX <- lm(
-  formula   = tg_c_transfer ~ (public_private * partner_choice) + dg_a_chosen_transfer, 
+lm_h4X <- lm(
+  formula   = tg_c_transfer ~ (public_private * partner_choice) 
+  + dg_a_chosen_transfer, 
   data      = df_h4a,
   contrasts = list(
     public_private = "contr.sum", 
@@ -2138,14 +2677,16 @@ lm_h4aX <- lm(
 # -------------- #
 # TYPE III ANOVA #
 # -------------- #
-anova_h4aX <- car::Anova(lm_h4aX, type = 3)
-parameters::model_parameters(anova_h4aX)
-effectsize::effectsize(anova_h4aX)
+anova_h4X <- car::Anova(lm_h4X, type = 3)
+parameters::model_parameters(anova_h4X)
+effectsize::effectsize(anova_h4X) |> as.data.frame()
 ```
 
 ## 3 Model Comparison Statistics
 
 ```{r main-text-model-comparison-statistics, message=F, warning=F}
+#| lst-label: model-comparison
+#| lst-cap: Model Comparison Statistics
 # ---------------- #
 # MODEL COMPARISON #
 # ---------------- #
@@ -2158,7 +2699,7 @@ dplyr::bind_rows(
   performance::compare_performance(lm_x5,  qm_x5)) |> 
   dplyr::mutate(
     Model = dplyr::if_else(
-      stringr::str_starts(Name, 'lm'), 'Linear', 'Quadratic'))
+      stringr::str_starts(Name, 'lm'), 'Linear', 'Quadratic')) 
 
 # ---------------------- # 
 # LIKELIHOOD RATIO TESTS #
@@ -2233,7 +2774,8 @@ df_x <- df_complete |>
   tidyr::separate_wider_delim(
     morality_target, delim = "_", 
     names = c("morality_target_game", "morality_target")) |> 
-  dplyr::mutate(transfer_allocator = stringr::str_remove(transfer_allocator, "_ratio")) |> 
+  dplyr::mutate(
+    transfer_allocator = stringr::str_remove(transfer_allocator, "_ratio")) |> 
   
   ## Distinguish stage (DG send vs. TG send vs. TG return)
   tidyr::separate_wider_delim(
@@ -2251,10 +2793,8 @@ df_x <- df_complete |>
       .default = "other"),
     .before = public_private) |> 
   dplyr::mutate(
-    morality_target_game = forcats::fct_relevel(
-      morality_target_game, "DG", "TG"),
-    allocation_stage     = forcats::fct_relevel(
-      allocation_stage, "transfer", "return"),
+    morality_target_game = forcats::fct_relevel(morality_target_game, "DG", "TG"),
+    allocation_stage     = forcats::fct_relevel(allocation_stage, "transfer", "return"),
     self_other           = forcats::fct_relevel(self_other, "self", "other"),
     public_private       = forcats::fct_relevel(public_private, "public", "private"),
     partner_choice       = forcats::fct_relevel(partner_choice, "yes", "no"))
@@ -2297,7 +2837,8 @@ MTCorrTab <- function(game = NULL, stage = NULL,
     tidyr::nest() |> 
     dplyr::ungroup() |> 
     dplyr::mutate(
-      cor_results = purrr::map(data, ~ cor.test(~ morality_rating + transfer, .x)),
+      cor_results = purrr::map(data, 
+                               ~ cor.test(~ morality_rating + transfer, .x)),
       df          = purrr::map_dbl(cor_results, ~ .$parameter),
       n           = df + 2,
       r           = purrr::map_dbl(cor_results, ~ .$estimate),
@@ -2316,7 +2857,6 @@ MTCorrTab <- function(game = NULL, stage = NULL,
       caption   = table_caption,
       col.names = c(col_names, "DF", "n", "r", "95% CI", "p"),
       digits    = c(rep(1, length(col_names)), 1, 1, 2, 1, 3))
-  
   corr_all <- list(correlation = corr_table)
   
   # Generate test statistics for Fisher's Z
@@ -2330,12 +2870,13 @@ MTCorrTab <- function(game = NULL, stage = NULL,
     row_combos <- combn(nrow(corr_test), 2, simplify = F)
     
     # Define a helper function to calculate the differences for a pair of rows
-    calc_diff <- function(pair) {
+    .CalcDiff <- function(pair) {
       idx1 <- pair[1]
       idx2 <- pair[2]    
       contrast_df <- dplyr::tibble(
-        contrast = paste(
-          corr_test$condition[idx1], "-", corr_test$condition[idx2]),
+        contrast = paste(corr_test$condition[idx1], 
+                         "-", 
+                         corr_test$condition[idx2]),
         z_diff   = corr_test$z_score[idx1] - corr_test$z_score[idx2],
         se       = sqrt(
           1 / (corr_test$n[idx1] - 3) + 1 / (corr_test$n[idx2] - 3))) |> 
@@ -2347,7 +2888,7 @@ MTCorrTab <- function(game = NULL, stage = NULL,
     }
     
     # Apply the function to each pair and combine the results into a single tibble
-    results <- purrr::map(row_combos, calc_diff) |> 
+    results <- purrr::map(row_combos, .CalcDiff) |> 
       purrr::list_rbind() |> 
       dplyr::mutate(
         # z_diff = papaja::printnum(z_diff),
@@ -2358,8 +2899,9 @@ MTCorrTab <- function(game = NULL, stage = NULL,
         col.names = c("Contrast", "z-difference", "SE", "z", "p"),
         digits    = c(1, 20, 2, 2, 3))
     
-    corr_all <- list(correlation = corr_table, 
-                     fishers_z   = results)
+    corr_all <- list(
+      correlation = corr_table, 
+      fishers_z   = results)
   }
   
   # Return table and test statistics as two values in a list
@@ -2380,7 +2922,7 @@ MTCorrTab <- function(game = NULL, stage = NULL,
 #' @param x,y  Numeric vectors of data values. x and y must have the same 
 #'   length.
 #' @param mmtt Character string indicating whether the correlation is between
-#'   transfer amounts or morality ratings.
+#'   transfer amounts or between morality ratings.
 #' @param table_caption `knitr::kable` table caption.
 #' @param col_names `knitr::kable` column headings for `var1` and `var2`.
 #'
@@ -2392,24 +2934,28 @@ MTCorrTab <- function(game = NULL, stage = NULL,
 MMTTCorrTab <- function(grouping_vars = NULL, x, y, mmtt = "transfer",
                         table_caption, col_names) {
   
+  corr_df <- df_complete
   if (mmtt == "transfer") {
-    corr_df <- df_complete |> 
+    corr_df <- corr_df |> 
       dplyr::group_by(unique_group_id) |> 
       dplyr::mutate(
         x = dplyr::if_else(is.na(x), dplyr::first(na.omit(x)), x),
-        y = dplyr::if_else(is.na(y), dplyr::first(na.omit(y)), y)) |> 
+        y = dplyr::if_else(is.na(y), dplyr::first(na.omit(y)), y)) |>
       dplyr::ungroup() |> 
-      dplyr::distinct(unique_group_id, .keep_all = T)
-  } else if (mmtt == "morality") {
-    corr_df <- df_complete
+      dplyr::distinct(unique_group_id, .keep_all = T) |> 
+      dplyr::select(unique_group_id, 
+                    public_private, partner_choice, 
+                    !!sym(x), !!sym(y)) |> 
+      tidyr::drop_na()
   }
   
-  corr_df <- corr_df |> 
+  corr_df <- corr_df |>
     dplyr::group_by(unique_group_id) |>
     dplyr::mutate(
       public_private = forcats::fct_relevel(public_private, "public", "private"),
       partner_choice = forcats::fct_relevel(partner_choice, "yes", "no")) |> 
-    dplyr::group_by(!!!rlang::syms(grouping_vars)) |> tidyr::nest() |> 
+    dplyr::group_by(!!!rlang::syms(grouping_vars)) |> 
+    tidyr::nest() |> 
     dplyr::ungroup() |>
     dplyr::mutate(
       cor_results = purrr::map(data, ~ cor.test(
@@ -2440,16 +2986,16 @@ MMTTCorrTab <- function(grouping_vars = NULL, x, y, mmtt = "transfer",
         condition = stringr::str_c(!!!rlang::syms(grouping_vars), sep = " "),
         z_score   = psych::fisherz(r),
         n         = df + 2)
-    
     row_combos <- combn(nrow(corr_test), 2, simplify = F)
     
     # Define a helper function to calculate the differences for a pair of rows
-    calc_diff <- function(pair) {
+    .CalcDiff <- function(pair) {
       idx1 <- pair[1]
       idx2 <- pair[2]    
       contrast_df <- dplyr::tibble(
-        contrast = paste(
-          corr_test$condition[idx1], "-", corr_test$condition[idx2]),
+        contrast = paste(corr_test$condition[idx1], 
+                         "-", 
+                         corr_test$condition[idx2]),
         z_diff   = corr_test$z_score[idx1] - corr_test$z_score[idx2],
         se       = sqrt(
           1 / (corr_test$n[idx1] - 3) + 1 / (corr_test$n[idx2] - 3))) |> 
@@ -2461,7 +3007,7 @@ MMTTCorrTab <- function(grouping_vars = NULL, x, y, mmtt = "transfer",
     }
     
     # Apply the function to each pair and combine the results into a single tibble
-    results <- purrr::map(row_combos, calc_diff) |> 
+    results <- purrr::map(row_combos, .CalcDiff) |> 
       purrr::list_rbind() |> 
       dplyr::mutate(
         z_diff = papaja::printnum(z_diff),
@@ -2472,8 +3018,9 @@ MMTTCorrTab <- function(grouping_vars = NULL, x, y, mmtt = "transfer",
         col.names = c("Contrast", "z-difference", "SE", "z", "p"),
         digits    = c(1, 2, 2, 2, 3))
     
-    corr_all <- list(correlation = corr_table, 
-                     fishers_z   = results)
+    corr_all <- list(
+      correlation = corr_table,
+      fishers_z   = results)
   }
   
   # Return table and test statistics as two values in a list
@@ -2656,7 +3203,7 @@ rm(dg_obs_p_moral_x_transfer_list)
 # PARTNER CHOICE x PERSPECTIVE #
 # ---------------------------- #
 dg_pc_p_moral_x_transfer_list <- MTCorrTab(
-  game          = "DG", 
+  game          = "DG",
   stage         = "transfer",
   grouping_vars = c("partner_choice", "self_other"),
   table_caption = "Correlation between morality ratings DG allocations",
@@ -2788,7 +3335,7 @@ rm(tg1_obs_pc_p_moral_x_transfer_list)
 #### TG Morality x Return Generosity
 
 ```{r tg-return-morality-x-tg-return-transfer-ratio, message=F, warning=F}
-# --------- # 
+# --------- #
 # COLLAPSED #
 # --------- #
 tg2_moral_x_transfer_list <- MTCorrTab(
@@ -2796,7 +3343,7 @@ tg2_moral_x_transfer_list <- MTCorrTab(
   stage         = "return",
   table_caption = "Correlation between morality ratings TG returns",
   col_names     = NULL)
-tg2_moral_x_transfer_list$correltaion
+tg2_moral_x_transfer_list$correlation
 rm(tg2_moral_x_transfer_list)
 
 # ------------- # 
@@ -3016,7 +3563,7 @@ rm(tg1_x_tg2_obs_pc_transfer_list)
 # COLLAPSED #
 # --------- # 
 dg_x_tg2_transfer_list <- MMTTCorrTab(
-  x             = "dg_a_gen_transfer_ratio",
+  x             = "dg_a_chosen_transfer_ratio",
   y             = "tg_a_return_ratio",
   mmtt          = "transfer",
   table_caption = "Correlation between DG allocations and TG returns",
@@ -3029,7 +3576,7 @@ rm(dg_x_tg2_transfer_list)
 # ------------- #
 dg_x_tg2_obs_transfer_list <- MMTTCorrTab(
   grouping_vars = c("public_private"),
-  x             = "dg_a_gen_transfer_ratio",
+  x             = "dg_a_chosen_transfer_ratio",
   y             = "tg_a_return_ratio",
   mmtt          = "transfer",
   table_caption = "Correlation between DG allocations and TG returns",
@@ -3043,7 +3590,7 @@ rm(dg_x_tg2_obs_transfer_list)
 # -------------- #
 dg_x_tg2_pc_transfer_list <- MMTTCorrTab(
   grouping_vars = c("partner_choice"),
-  x             = "dg_a_gen_transfer_ratio",
+  x             = "dg_a_chosen_transfer_ratio",
   y             = "tg_a_return_ratio",
   mmtt          = "transfer",
   table_caption = "Correlation between DG allocations and TG returns",
@@ -3057,7 +3604,7 @@ rm(dg_x_tg2_pc_transfer_list)
 # ------------------------------ #
 dg_x_tg2_obs_pc_transfer_list <- MMTTCorrTab(
   grouping_vars = c("public_private", "partner_choice"),
-  x             = "dg_a_gen_transfer_ratio",
+  x             = "dg_a_chosen_transfer_ratio",
   y             = "tg_a_return_ratio",
   mmtt          = "transfer",
   table_caption = "Correlation between DG allocations and TG returns",
@@ -3235,13 +3782,15 @@ dg_x_tg2_obs_pc_moral_list$fishers_z
 rm(dg_x_tg2_obs_pc_moral_list)
 ```
 
+# Write Complete Data to File
+
 ```{r write-anonymized-data, message=F, warning=F}
-# Write complete data to file
 df_complete |> 
   dplyr::select(-c(
-    matches("submit"), income, education, political_overall, 
-    political_overall_4_text, believe_real_better, guess, technical, comments_qs)) |> 
+    dplyr::matches("submit"), income, education, employment, political_overall, 
+    political_overall_4_text, believe_real_better, 
+    guess, technical, comments_qs)) |> 
   vroom::vroom_write(
-  here::here("main/data/clean/main-data-clean-complete-anonymized.csv"),
-  delim = ",")
+    here::here("main/data/clean/main-data-clean-complete-anonymized.csv"),
+    delim = ",")
 ```

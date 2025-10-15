@@ -50,37 +50,52 @@ pacman::p_load(
 df_complete <- vroom::vroom(
   here::here("pilot/data/clean/pilot-data-clean-complete.csv"), 
   show_col_types = F, delim = ",") |> 
-  dplyr::mutate(public_private = forcats::fct_relevel(public_private, c("public", "private")))
+  dplyr::mutate(
+    public_private = forcats::fct_relevel(
+      public_private, c("public", "private")))
 ```
 
 ## Set Plotting Theme
 
 ```{r plotting-defaults, message=F, warning=F}
-theme_nl <- function() {
+theme_aps <- function() {
   list(
-    ggplot2::theme_bw() +
+    ggplot2::theme_bw(base_family = "hn57") +
       ggplot2::theme(
-        axis.ticks           = element_line(size = 0.25),
-        axis.ticks.length    = unit(.05, units = "cm"),
-        text                 = element_text(family = "Arial"),
-        axis.title.x         = ggtext::element_markdown(size = 6, 
-                                                        margin = margin(t = 5)),
-        axis.text.x          = element_text(size = 5),
-        axis.title.y         = ggtext::element_markdown(size = 6, angle = 90),
-        axis.text.y          = element_text(size = 5),
-        panel.grid.major     = element_line(size = 0.1, color = "darkgray"),
-        panel.grid.minor     = element_line(size = 0.1, color = "darkgray"),
-        panel.border         = element_blank(),  # Remove all borders
-        axis.line.x          = element_line(color = "black", linewidth = 0.25),  # bottom border
-        axis.line.y          = element_line(color = "black", linewidth = 0.25),  # left border
-        strip.background     = element_rect(colour = "#D9D9D9"),
-        strip.text           = element_text(size = 5, face = "bold"),
-        legend.title         = ggtext::element_markdown(size = 6),
-        legend.text          = element_text(size = 5),
-        legend.key.size      = unit(.75, "line"),
+        text                 = ggplot2::element_text(color  = "black",
+                                                     family = "hn57"),
+        axis.ticks           = ggplot2::element_line(color     = "black",
+                                                     linewidth = 0.25),
+        axis.ticks.length    = ggplot2::unit(.05, units = "cm"),
+        axis.title.x         = ggplot2::element_text(color  = "black",
+                                                     size   = 10,
+                                                     margin = margin(t = 10)),
+        axis.text.x          = ggplot2::element_text(color = "black",
+                                                     size  = 9),
+        axis.title.y         = ggplot2::element_text(size   = 10, 
+                                                     angle  = 90,
+                                                     margin = margin(r = 10)),
+        axis.text.y          = ggplot2::element_text(color = "black",
+                                                     size  = 9),
+        axis.line.x          = ggplot2::element_line(color     = "black", 
+                                                     linewidth = 0.25),
+        axis.line.y          = ggplot2::element_line(color     = "black", 
+                                                     linewidth = 0.25),
+        panel.grid.major     = ggplot2::element_blank(),
+        panel.grid.minor     = ggplot2::element_blank(),
+        panel.border         = ggplot2::element_rect(color = "black",
+                                                     linewidth = 0.25),
+        strip.background     = ggplot2::element_rect(color     = "black", 
+                                                     linewidth = 0.25),
+        strip.text           = ggplot2::element_text(size = 10),
+        legend.title         = ggtext::element_markdown(size = 10),
+        legend.text          = ggplot2::element_text(size = 9),
+        legend.key.size      = ggplot2::unit(.75, "line"),
         legend.justification = "center",
         legend.position      = "bottom",
-        legend.box           = "horizontal"))
+        legend.box           = "horizontal",
+        plot.tag             = ggplot2::element_text(size = 18,
+                                                     face = "bold")))
 }
 ```
 
@@ -239,7 +254,7 @@ df_complete |>
     y     = "Count",
     fill  = "Sex") +
   ggplot2::scale_fill_manual(values = c("#00A9FF", "#ED68ED", "#8494FF")) +
-  theme_nl()
+  theme_aps()
 
 # Age
 df_complete |> 
@@ -250,7 +265,7 @@ df_complete |>
     title = "Age Distribution",
     x     = "Age",
     y     = "Count") + 
-  theme_nl()
+  theme_aps()
 
 # Income
 df_complete |> 
@@ -263,7 +278,7 @@ df_complete |>
     x     = "Income",
     y     = "Count") + 
   ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45)) +
-  theme_nl()
+  theme_aps()
 
 # Education
 df_complete |> 
@@ -276,7 +291,7 @@ df_complete |>
     title = "Education Distribution",
     x     = "Education",
     y     = "Count") + 
-  theme_nl() +
+  theme_aps() +
   ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45))
 
 # Employment Status
@@ -289,7 +304,7 @@ df_complete |>
     title = "Employment Status Distribution",
     x     = "Employment Status",
     y     = "Count") + 
-  theme_nl() +
+  theme_aps() +
   ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45))
 
 # Political Affiliation
@@ -307,7 +322,7 @@ df_complete |>
     y     = "Count") + 
   ggplot2::guides(fill = "none") +
   ggplot2::scale_fill_manual(values = c("#F8766D", "#35A2FF", "#8494FF", "#39B600"))
-  theme_nl()
+  theme_aps()
 ```
 :::
 
@@ -319,24 +334,36 @@ df_complete |>
 
 ### Preregistered H1 (H1 in Main Paper)
 
-Independent-Samples T-Test
-
-```{r hypothesis-1-prereg-t-test, message=F, warning=F}
+```{r hypothesis-1-prep-data, message=F, warning=F}
 # --------- #
 # PREP DATA #
 # --------- #
 df_pre1 <- df_complete |> 
   dplyr::select(
-    participant_role, public_private, partner_choice, dg_a_gen_transfer) |> 
+    participant_role, public_private, partner_choice, dg_a_gen_transfer_ratio) |> 
   dplyr::filter(stringr::str_starts(participant_role, "A")) |> 
-  tidyr::drop_na(dg_a_gen_transfer) |> 
-  dplyr::mutate(public_private = forcats::fct_relevel(public_private, "public"))
+  tidyr::drop_na(dg_a_gen_transfer_ratio) |> 
+  dplyr::mutate(
+    partner_choice = forcats::fct_relevel(
+      dplyr::case_when(
+        partner_choice == "yes" ~ "Yes",
+        partner_choice == "no"  ~ "No"),
+      c("No", "Yes")),
+    public_private = forcats::fct_relevel(
+      dplyr::case_when(
+        public_private == "public"  ~ "Public",
+        public_private == "private" ~ "Private"),
+      c("Private", "Public")))
+```
 
+Independent-Samples T-Test
+
+```{r hypothesis-1-prereg-t-test, message=F, warning=F}
 # -------------------------- #
 # INDEPENDENT-SAMPLES T-TEST #
 # -------------------------- #
 ttest_pre1 <- t.test(
-  formula     = dg_a_gen_transfer ~ public_private, 
+  formula     = dg_a_gen_transfer_ratio ~ public_private, 
   data        = df_pre1, 
   alternative = "greater")
 parameters::model_parameters(ttest_pre1)
@@ -346,17 +373,32 @@ effectsize::effectsize(ttest_pre1)
 # LINEAR MODEL #
 # ------------ #
 lm_pre1 <- lm(
-  formula   = dg_a_gen_transfer ~ public_private, 
+  formula   = dg_a_gen_transfer_ratio ~ public_private, 
   data      = df_pre1, 
   contrasts = list(public_private = "contr.sum"))
+
+# -------------- #
+# TYPE III ANOVA #
+# -------------- #
+anova_lm_pre1 <- car::Anova(lm_pre1, type = 3)
+parameters::model_parameters(anova_lm_pre1)
+effectsize::effectsize(anova_lm_pre1) |> as.data.frame()
 
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(df_preh1$public_private)
+table(df_pre1$public_private)
+# Observability: Public - Private
+lm_pre1_obs_emm <- emmeans::emmeans(lm_pre1, specs = ~public_private)
+parameters::model_parameters(lm_pre1_obs_emm)
+
 # Observability: Public - Private
 parameters::model_parameters(
-  emmeans::emmeans(lm_pre1, specs = ~public_private))
+  emmeans::contrast(
+    object = lm_pre1_obs_emm, 
+    method = "pairwise", 
+    infer  = T, 
+    adjust = "none"))
 ```
 
 ### Preregistered H2 (H4 in Main Paper)
@@ -585,11 +627,11 @@ effectsize::effectsize(anova_lm_h1)
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(df_h1$public_private)
+table(df_h1$public_private)
 lm_h1_obs_emm <- emmeans::emmeans(lm_h1, specs = ~public_private)
 parameters::model_parameters(lm_h1_obs_emm)
 
-# table(df_h1$partner_choice)
+table(df_h1$partner_choice)
 lm_h1_pc_emm  <- emmeans::emmeans(lm_h1, specs = ~partner_choice)
 parameters::model_parameters(lm_h1_pc_emm)
 
@@ -609,7 +651,7 @@ parameters::model_parameters(
   emmeans::contrast(
     object = lm_h1_pc_emm, 
     method = "pairwise", 
-    infer  = T, 
+    infer  = T,
     adjust = "none"))
 
 # --------------------------------- #
@@ -637,10 +679,30 @@ parameters::model_parameters(
 ### Modeling Game Behavior
 
 ```{r hypothesis-2-prep-data, message=F, warning=F}
+#| lst-label: hypothesis2-lm
+#| lst-cap: H2 Game Behavior
+
 # --------- #
 # PREP DATA #
 # --------- #
-df_h2 <- df_pre5
+df_h2 <- df_complete |> 
+  dplyr::filter(!stringr::str_starts(participant_role, "B")) |>
+  dplyr::select(
+    unique_group_id, participant_role, public_private, partner_choice,
+    dg_a_chosen_transfer_ratio, tg_a_return_ratio) |> 
+  dplyr::group_by(unique_group_id) |> 
+  dplyr::mutate(
+    dg_a_chosen_transfer_ratio = dplyr::if_else(
+      is.na(dg_a_chosen_transfer_ratio), 
+      dplyr::first(na.omit(dg_a_chosen_transfer_ratio)), 
+      dg_a_chosen_transfer_ratio),
+    tg_a_return_ratio = dplyr::if_else(
+      is.na(tg_a_return_ratio), 
+      dplyr::first(na.omit(tg_a_return_ratio)), 
+      tg_a_return_ratio)) |> 
+  dplyr::ungroup() |>
+  dplyr::arrange(unique_group_id, participant_role) |> 
+  dplyr::distinct(unique_group_id, .keep_all = T)
 ```
 
 #### Linear Model
@@ -840,7 +902,7 @@ lm_h3a <- lm(
 parameters::model_parameters(lm_h3a)
 
 # Standardized Regression Coefficient
-effectsize::effectsize(lm_h3a)
+effectsize::effectsize(lm_h3a) 
 ```
 
 #### Curvilinear Model
@@ -947,7 +1009,7 @@ lm_h3b <- lm(
 # -------------- #
 anova_lm_h3b <- car::Anova(lm_h3b, type = 3)
 parameters::model_parameters(anova_lm_h3b)
-effectsize::effectsize(anova_lm_h3b)
+effectsize::effectsize(anova_lm_h3b) |> as.data.frame()
 
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
@@ -1041,7 +1103,25 @@ parameters::model_parameters(
 # --------- #
 # PREP DATA #
 # --------- #
-df_h4a <- df_pre2
+df_h4a <- df_complete |>
+  dplyr::filter(!stringr::str_starts(participant_role, "B")) |>
+  dplyr::select(
+    unique_group_id, participant_role, 
+    public_private, partner_choice,
+    dg_a_chosen_transfer_ratio, tg_c_transfer_ratio) |> 
+  dplyr::group_by(unique_group_id) |> 
+  dplyr::mutate(
+    dg_a_chosen_transfer_ratio = dplyr::if_else(
+      is.na(dg_a_chosen_transfer_ratio), 
+      dplyr::first(na.omit(dg_a_chosen_transfer_ratio)), 
+      dg_a_chosen_transfer_ratio),
+    tg_c_transfer_ratio = dplyr::if_else(
+      is.na(tg_c_transfer_ratio), 
+      dplyr::first(na.omit(tg_c_transfer_ratio)), 
+      tg_c_transfer_ratio)) |> 
+  dplyr::ungroup() |>
+  dplyr::distinct(unique_group_id, .keep_all = T) |> 
+  dplyr::arrange(unique_group_id, participant_role)
 ```
 
 #### Linear Model
@@ -1067,11 +1147,11 @@ effectsize::effectsize(anova_lm_h4a)
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(df_h4a$public_private)
+table(df_h4a$public_private)
 lm_h4a_obs_emm <- emmeans::emmeans(lm_h4a, specs = ~public_private)
 parameters::model_parameters(lm_h4a_obs_emm)
 
-# table(df_h4a$partner_choice)
+table(df_h4a$partner_choice)
 lm_h4a_pc_emm  <- emmeans::emmeans(lm_h4a, specs = ~partner_choice)
 parameters::model_parameters(lm_h4a_pc_emm)
 
@@ -1214,17 +1294,17 @@ lm_h4b <- lm(  # subsetting on "other"
 # -------------- #
 anova_h4b <- car::Anova(lm_h4b, type = 3)
 parameters::model_parameters(anova_h4b)
-effectsize::effectsize(anova_h4b)
+effectsize::effectsize(anova_h4b) |> as.data.frame()
 
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
 # ------------------------ #
-# table(dplyr::filter(df_h4b, self_other == "other")$public_private)
+table(dplyr::filter(df_h4b, self_other == "other")$public_private)
 # Observability: Public - Private
 lm_h4b_obs_emm <- emmeans::emmeans(lm_h4b, specs = ~public_private) 
 parameters::model_parameters(lm_h4b_obs_emm)
 
-# table(dplyr::filter(df_h4b, self_other == "other")$partner_choice)
+table(dplyr::filter(df_h4b, self_other == "other")$partner_choice)
 # Partner Choice: No - Yes
 lm_h4b_pc_emm  <- emmeans::emmeans(lm_h4b, specs = ~partner_choice) 
 parameters::model_parameters(lm_h4b_pc_emm)
@@ -1333,7 +1413,7 @@ lm_x5 <- lm(
 # -------------- # 
 anova_lm_x5 <- car::Anova(lm_x5, type = 3)
 parameters::model_parameters(anova_lm_x5)
-effectsize::effectsize(anova_lm_x5)
+effectsize::effectsize(anova_lm_x5) |> as.data.frame()
 
 # ------------------------ #
 # ESTIMATED MARGINAL MEANS #
